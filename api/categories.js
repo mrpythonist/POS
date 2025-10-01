@@ -1,78 +1,117 @@
+// api/categories.js
 import express from "express";
 import bodyParser from "body-parser";
+import multer from "multer";
+import fs from "fs";
+import path from "path";
 import db from "../db/db.js";
 
-const app = express();
+export default function createCategoryRoutes(uploadDir) {
+  const app = express();
+  app.use(bodyParser.json());
 
-app.use(bodyParser.json());
+  // Ensure uploads dir exists
+  if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
-// Create table if it doesn't exist
-db.prepare(`
-  CREATE TABLE IF NOT EXISTS categories (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL
-  )
-`).run();
+  // Multer storage
+  const storage = multer.diskStorage({
+    destination: uploadDir,
+    filename: (req, file, cb) => {
+      cb(null, Date.now() + path.extname(file.originalname));
+    },
+  });
+  const upload = multer({ storage });
 
-// Test route
-app.get("/", (req, res) => {
-  res.send("Category API (SQLite - better-sqlite3)");
-});
+  // ✅ Test route
+  app.get("/", (req, res) => {
+    res.send("Category API (SQLite - better-sqlite3)");
+  });
 
-// GET /all → fetch all categories
-app.get("/all", (req, res) => {
-  try {
-    const rows = db.prepare("SELECT * FROM categories ORDER BY id DESC").all();
-    res.json(rows);
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
-});
+  // ✅ Get all categories
+  app.get("/all", (req, res) => {
+    try {
+      const rows = db.prepare(`SELECT * FROM categories ORDER BY id DESC`).all();
+      res.json(rows);
+    } catch (err) {
+      res.status(500).send(err.message);
+    }
+  });
 
-// POST /category → insert new category
-app.post("/category", (req, res) => {
-  const { name } = req.body;
-  if (!name) return res.status(400).send("Category name required");
+  // ✅ Insert category
+  app.post("/category", upload.single("catImg"), (req, res) => {
+    try {
+      let image = req.body.img || "";
+      if (req.file) image = req.file.filename;
 
-  try {
-    const stmt = db.prepare("INSERT INTO categories (name) VALUES (?)");
-    const result = stmt.run(name);
-    console.log("Inserted row info:", result);
-    res.json({ id: result.lastInsertRowid, name });
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
-});
+      // Handle remove flag
+      if (req.body.remove == 1 && req.body.img) {
+        const oldPath = path.join(uploadDir, req.body.img);
+        try { fs.unlinkSync(oldPath); } catch (err) { console.error(err); }
+        if (!req.file) image = "";
+      }
 
-// DELETE /category/:categoryId → remove category
-app.delete("/category/:categoryId", (req, res) => {
-  const { categoryId } = req.params;
+      const { name, parent_id = null } = req.body;
+      if (!name) return res.status(400).send("Category name required");
 
-  try {
-    const stmt = db.prepare("DELETE FROM categories WHERE id = ?");
-    const result = stmt.run(categoryId);
+      const stmt = db.prepare(`
+        INSERT INTO categories (name, parent_id, img, created_at, updated_at)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `);
+      const result = stmt.run(name, parent_id, image);
 
-    if (result.changes === 0) return res.status(404).send("Category not found");
-    res.sendStatus(200);
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
-});
+      res.json({ 
+        id: result.lastInsertRowid, 
+        name, 
+        parent_id, 
+        img: image 
+      });
+    } catch (err) {
+      res.status(500).send(err.message);
+    }
+  });
 
-// PUT /category → update category
-app.put("/category", (req, res) => {
-  const { id, name } = req.body;
-  if (!id || !name) return res.status(400).send("ID and name required");
+  // ✅ Update category
+  app.put("/category", upload.single("catImg"), (req, res) => {
+    try {
+      let image = req.body.img || "";
+      if (req.file) image = req.file.filename;
 
-  try {
-    const stmt = db.prepare("UPDATE categories SET name = ? WHERE id = ?");
-    const result = stmt.run(name, id);
+      if (req.body.remove == 1 && req.body.img) {
+        const oldPath = path.join(uploadDir, req.body.img);
+        try { fs.unlinkSync(oldPath); } catch (err) { console.error(err); }
+        if (!req.file) image = "";
+      }
 
-    if (result.changes === 0) return res.status(404).send("Category not found");
-    res.sendStatus(200);
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
-});
+      const { id, name, parent_id = null } = req.body;
+      if (!id || !name) return res.status(400).send("ID and name required");
 
-export default app;
+      const stmt = db.prepare(`
+        UPDATE categories
+        SET name = ?, parent_id = ?, img = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `);
+      const result = stmt.run(name, parent_id, image, id);
+
+      if (result.changes === 0) return res.status(404).send("Category not found");
+      res.json({ id, name, parent_id, img: image });
+    } catch (err) {
+      res.status(500).send(err.message);
+    }
+  });
+
+  // ✅ Delete category
+  app.delete("/category/:categoryId", (req, res) => {
+    try {
+      const { categoryId } = req.params;
+      const stmt = db.prepare("DELETE FROM categories WHERE id = ?");
+      const result = stmt.run(categoryId);
+
+      if (result.changes === 0) return res.status(404).send("Category not found");
+      res.sendStatus(200);
+    } catch (err) {
+      res.status(500).send(err.message);
+    }
+  });
+
+  return app;
+}
