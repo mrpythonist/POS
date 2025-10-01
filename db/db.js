@@ -56,9 +56,9 @@ if (settingsCount === 0) {
       tax, symbol, percentage, charge_tax, footer, img
     ) VALUES (
       1, 'POS', 'FLAVORS',
-      'Main Road, Zarif Shaheed, Shujabad, Multan',
-      '', '03055475970',
-      0, 'Rs. ', 0, 0, 'Thank you visiting US!', ''
+      'Near Malik Solar Energy, Lodhran Road',
+      'Rajaram Zarif Shaheed, Shujabad, Multan', '0310-4004515',
+      0, 'Rs. ', 0, 0, 'Thank you for visiting US!', 'assets/images/logo.png'
     )
   `).run();
 
