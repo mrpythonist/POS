@@ -35,10 +35,18 @@ app.get("/user/:userId", (req, res) => {
 });
 
 app.get("/logout/:userId", (req, res) => {
-  if (!req.params.userId) return res.status(500).send("ID field is required.");
-  const status = "Logged Out_" + new Date();
-  db.prepare("UPDATE users SET status = ? WHERE id = ?").run(status, parseInt(req.params.userId));
-  res.sendStatus(200);
+  try {
+    const userId = parseInt(req.params.userId);
+    if (!userId) return res.status(400).send("ID field is required.");
+
+    const stmt = db.prepare("UPDATE users SET status = ? WHERE id = ?");
+    stmt.run("Logged Out_" + new Date(), userId);
+
+    res.sendStatus(200);
+  } catch (err) {
+    console.error("Logout error:", err);
+    res.status(500).send({ error: "Failed to logout", details: err.message });
+  }
 });
 
 app.post("/login", (req, res) => {

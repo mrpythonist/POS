@@ -116,10 +116,10 @@ $.fn.serializeObject = function () {
 };
 
 // --- Load auth and user from storage ---
-auth = storage.get('auth');
-user = storage.get('user');
+auth =  await storage.get('auth');
+user = await storage.get('user');
 
-// --- Function declarations (hoisted, so can be called anywhere) ---
+
 
 // Load settings from API
 function loadSettings() {
@@ -895,7 +895,7 @@ if (!auth) {
                 }, error: function (data) {
                     $(".loading").hide();
                     $("#dueModal").modal('toggle');
-                    Swal("Something went wrong!", 'Please refresh this page and try again');
+                    Swal("Something went wrong!", 'Please refresh this page and try again','error');
 
                 }
             });
@@ -1668,9 +1668,8 @@ if (!auth) {
 
 
 
-        $('#log-out').click(function () {
-
-            Swal.fire({
+        $('#log-out').click(async function () {
+            const result = await Swal.fire({
                 title: 'Are you sure?',
                 text: "You are about to log out.",
                 icon: 'warning',
@@ -1678,16 +1677,24 @@ if (!auth) {
                 confirmButtonColor: '#d33',
                 cancelButtonColor: '#3085d6',
                 confirmButtonText: 'Logout'
-            }).then((result) => {
-
-                if (result.value) {
-                    $.get(api + 'users/logout/' + user.id, function (data) {
-                        storage.delete('auth');
-                        storage.delete('user');
-                        window.api.reload();
-                    });
-                }
             });
+
+            if (result.isConfirmed) {
+                try {
+                    // Optional: call API logout
+                    await $.get(api + 'users/logout/' + user.id);
+
+                    // Clear stored auth and user
+                    await storage.delete('auth');
+                    await storage.delete('user');
+
+                    // Reload app
+                    window.api.reload();
+                } catch (err) {
+                    console.error("Logout failed:", err);
+                    Swal.fire('Error', 'Failed to log out', 'error');
+                }
+            }
         });
 
 
@@ -2011,91 +2018,128 @@ $.fn.print = function () {
 
 
     function loadTransactions() {
+
         let tills = [];
         let users = [];
         let sales = 0;
         let transact = 0;
 
-        sold_items = [];
-        sold = [];
+        let sold_items = [];
+        let sold = [];
 
+        let counter = 0;
         let transaction_list = '';
         let query = `by-date?start=${start_date}&end=${end_date}&user=${by_user}&status=${by_status}&till=${by_till}`;
 
         $.get(api + query, function (transactions) {
-            if (!transactions || transactions.length === 0) {
-                Swal.fire('No data!', 'No transactions available within the selected criteria', 'warning');
+
+            if (transactions.length > 0) {
+
                 $('#transaction_list').empty();
-                $('#transactionList').DataTable().clear().destroy();
-                return;
+                $('#transactionList').DataTable().destroy();
+
+                allTransactions = [...transactions];
+
+                console.log(transactions);
+
+                transactions.forEach((trans, index) => {
+
+                    sales += parseFloat(trans.total);
+                    transact++;
+
+                    // Parse items JSON string safely
+                    let items = [];
+                    try {
+                        items = JSON.parse(trans.items);
+                    } catch (err) {
+                        console.error("Failed to parse items for transaction", trans.id, err);
+                    }
+
+                    // Add parsed items to sold_items
+                    sold_items.push(...items);
+
+                    if (!tills.includes(trans.till)) {
+                        tills.push(trans.till);
+                    }
+
+                    if (!users.includes(trans.user_id)) {
+                        users.push(trans.user_id);
+                    }
+
+                    counter++;
+                    transaction_list += `<tr>
+                        <td>${trans.order || (index+1)}</td>
+                        <td class="nobr">${moment(trans.date).format('YYYY MMM DD hh:mm:ss')}</td>
+                        <td>${settings.symbol + trans.total}</td>
+                        <td>${trans.paid == "" ? "" : settings.symbol + trans.paid}</td>
+                        <td>${trans.change ? settings.symbol + Math.abs(trans.change).toFixed(2) : ''}</td>
+                        <td>${trans.paid == "" ? "" : trans.payment_type == 0 ? "Cash" : 'Card'}</td>
+                        <td>${trans.till}</td>
+                        <td>${trans.user || ''}</td>
+                        <td>${trans.paid == "" 
+                            ? '<button class="btn btn-dark"><i class="fa fa-search-plus"></i></button>' 
+                            : '<button onClick="$(this).viewTransaction(' + index + ')" class="btn btn-info"><i class="fa fa-search-plus"></i></button>'
+                        }</td>
+                    </tr>`;
+
+                    if (counter == transactions.length) {
+
+                        $('#total_sales #counter').text(settings.symbol + parseFloat(sales).toFixed(2));
+                        $('#total_transactions #counter').text(transact);
+
+                        // Aggregate sold items
+                        const result = {};
+                        for (const { product_name, price, quantity, id } of sold_items) {
+                            if (!result[product_name]) result[product_name] = [];
+                            result[product_name].push({ id, price, quantity });
+                        }
+
+                        sold = [];
+                        for (let item in result) {
+                            let price = 0;
+                            let quantity = 0;
+                            let id = 0;
+
+                            result[item].forEach(i => {
+                                id = i.id;
+                                price = i.price;
+                                quantity += i.quantity;
+                            });
+
+                            sold.push({
+                                id: id,
+                                product: item,
+                                qty: quantity,
+                                price: price
+                            });
+                        }
+
+                        loadSoldProducts();
+
+                        if (by_user == 0 && by_till == 0) {
+                            userFilter(users);
+                            tillFilter(tills);
+                        }
+
+                        $('#transaction_list').html(transaction_list);
+                        $('#transactionList').DataTable({
+                            "order": [[1, "desc"]],
+                            "autoWidth": false,
+                            "info": true,
+                            "JQueryUI": true,
+                            "ordering": true,
+                            "paging": true,
+                            "dom": 'Bfrtip',
+                            "buttons": ['csv', 'excel', 'pdf']
+                        });
+                    }
+                });
+            } else {
+                Swal.fire('No data!', 'No transactions available within the selected criteria', 'warning');
             }
 
-            $('#transaction_list').empty();
-            $('#transactionList').DataTable().destroy();
-            allTransactions = [...transactions];
-
-            transactions.forEach((transArray, index) => {
-                // transArray is directly an array of items
-                sold_items.push(...transArray);
-
-                // Calculate total for this transaction
-                let totalForTrans = 0;
-                transArray.forEach(item => {
-                    totalForTrans += parseFloat(item.price) * parseInt(item.quantity);
-                });
-                sales += totalForTrans;
-                transact++;
-
-                transaction_list += `<tr>
-                    <td>${index + 1}</td>
-                    <td class="nobr">${moment().format('YYYY MMM DD hh:mm:ss')}</td>
-                    <td>${settings.symbol}${totalForTrans.toFixed(2)}</td>
-                    <td></td>
-                    <td></td>
-                    <td>Cash/Card</td>
-                    <td></td>
-                    <td></td>
-                    <td><button class="btn btn-dark"><i class="fa fa-search-plus"></i></button></td>
-                </tr>`;
-            });
-
-            // Aggregate sold items
-            const result = {};
-            sold_items.forEach(({ product_name, price, quantity, id }) => {
-                if (!result[product_name]) result[product_name] = [];
-                result[product_name].push({ id, price, quantity });
-            });
-
-            for (const item in result) {
-                let totalQty = 0;
-                let price = 0;
-                let id = 0;
-                result[item].forEach(i => {
-                    id = i.id;
-                    price = i.price;
-                    totalQty += i.quantity;
-                });
-                sold.push({ id, product: item, qty: totalQty, price });
-            }
-
-            loadSoldProducts();
-
-            $('#transaction_list').html(transaction_list);
-            $('#transactionList').DataTable({
-                order: [[1, 'desc']],
-                autoWidth: false,
-                info: true,
-                JQueryUI: true,
-                ordering: true,
-                paging: true,
-                dom: 'Bfrtip',
-                buttons: ['csv', 'excel', 'pdf']
-            });
-
-            $('#total_sales #counter').text(settings.symbol + parseFloat(sales).toFixed(2));
-            $('#total_transactions #counter').text(transact);
-    });
-}
+        });
+    }
 
 
 function discend(a, b) {
@@ -2151,6 +2195,7 @@ function userFilter(users) {
     $('#users').empty();
     $('#users').append(`<option value="0">All</option>`);
 
+    console.log(users);
     users.forEach(user => {
         let u = allUsers.filter(function (usr) {
             return usr.id == user;
@@ -2344,45 +2389,39 @@ function authenticate() {
 }
 
 
-$('body').on("submit", "#account", function (e) {
+$('body').on("submit", "#account", async function (e) {
     e.preventDefault();
     let formData = $(this).serializeObject();
 
     if (formData.username == "" || formData.password == "") {
-
-        Swal.fire(
-            'Incomplete form!',
-            auth_empty,
-            'warning'
-        );
+        Swal.fire('Incomplete form!', auth_empty, 'warning');
+        return;
     }
-    else {
 
-        $.ajax({
+    try {
+        const data = await $.ajax({
             url: api + 'users/login',
             type: 'POST',
             data: JSON.stringify(formData),
             contentType: 'application/json; charset=utf-8',
             cache: false,
             processData: false,
-            success: function (data) {
-                if (data.id) {
-                    storage.set('auth', { auth: true });
-                    storage.set('user', data);
-                    window.api.reload();
-                }
-                else {
-                    Swal.fire(
-                        'Oops!',
-                        auth_error,
-                        'warning'
-                    );
-                }
-
-            }, error: function (data) {
-                console.log(data);
-            }
         });
+
+        if (data.id) {
+            // Persist auth and user forever
+            await storage.set('auth', { auth: true });
+            await storage.set('user', data);
+
+            // Reload the app
+            window.api.reload();
+        } else {
+            Swal.fire('Oops!', auth_error, 'warning');
+        }
+
+    } catch (err) {
+        console.error(err);
+        Swal.fire('Error!', 'Login request failed', 'error');
     }
 });
 
