@@ -17,30 +17,17 @@ export default function createInventoryRoutes(uploadDir) {
   const storage = multer.diskStorage({
     destination: uploadDir,
     filename: (req, file, callback) => {
-      callback(null, Date.now() + path.extname(file.originalname)); // preserve extension
+      callback(null, Date.now() + path.extname(file.originalname));
     },
   });
   const upload = multer({ storage });
 
-  // Create inventory table if not exists
-  db.prepare(`
-    CREATE TABLE IF NOT EXISTS inventory (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT,
-      price REAL,
-      category TEXT,
-      quantity INTEGER DEFAULT 0,
-      stock INTEGER DEFAULT 1,
-      img TEXT
-    )
-  `).run();
-
   // Routes
-
   app.get("/", (req, res) => {
     res.send("Inventory API (SQLite - better-sqlite3)");
   });
 
+  // Get single product
   app.get("/product/:productId", (req, res) => {
     try {
       const { productId } = req.params;
@@ -52,6 +39,7 @@ export default function createInventoryRoutes(uploadDir) {
     }
   });
 
+  // Get all products
   app.get("/products", (req, res) => {
     try {
       const rows = db.prepare("SELECT * FROM inventory ORDER BY id DESC").all();
@@ -61,48 +49,62 @@ export default function createInventoryRoutes(uploadDir) {
     }
   });
 
-  // Add / Update product
+  // Insert or Update product
   app.post("/product", upload.single("imagename"), (req, res) => {
     try {
       let image = req.body.img || "";
-
       if (req.file) image = req.file.filename;
 
+      // Handle image deletion
       if (req.body.remove == 1 && req.body.img) {
         const oldPath = path.join(uploadDir, req.body.img);
         try { fs.unlinkSync(oldPath); } catch (err) { console.error(err); }
         if (!req.file) image = "";
       }
 
-      const { id, price, category, quantity, name, stock } = req.body;
+      const { id, price, category_id, name, description, status } = req.body;
+      const now = new Date().toISOString();
 
       if (!id) {
+        // Insert new product
         const stmt = db.prepare(`
-          INSERT INTO inventory (name, price, category, quantity, stock, img)
+          INSERT INTO inventory (name, category_id, price, description, img, status)
           VALUES (?, ?, ?, ?, ?, ?)
         `);
         const result = stmt.run(
           name,
+          category_id || null,
           price,
-          category,
-          quantity || 0,
-          stock === "on" ? 0 : 1,
-          image
+          description || "",
+          image,
+          status === "0" ? 0 : 1
         );
-        res.json({ id: result.lastInsertRowid, name, price, category, quantity, stock, img: image });
+        res.json({
+          id: result.lastInsertRowid,
+          name,
+          category_id: category_id || null,
+          price,
+          description: description || "",
+          img: image,
+          status: status === "0" ? 0 : 1,
+          created_at: now,
+          updated_at: now
+        });
       } else {
+        // Update existing product
         const stmt = db.prepare(`
           UPDATE inventory
-          SET name=?, price=?, category=?, quantity=?, stock=?, img=?
+          SET name=?, category_id=?, price=?, description=?, img=?, status=?, updated_at=?
           WHERE id=?
         `);
         const result = stmt.run(
           name,
+          category_id || null,
           price,
-          category,
-          quantity || 0,
-          stock === "on" ? 0 : 1,
+          description || "",
           image,
+          status === "0" ? 0 : 1,
+          now,
           id
         );
         if (result.changes === 0) return res.status(404).send("Product not found");
@@ -113,6 +115,7 @@ export default function createInventoryRoutes(uploadDir) {
     }
   });
 
+  // Delete product
   app.delete("/product/:productId", (req, res) => {
     try {
       const { productId } = req.params;
@@ -123,31 +126,6 @@ export default function createInventoryRoutes(uploadDir) {
       res.status(500).send(err.message);
     }
   });
-
-  // SKU lookup
-  app.post("/product/sku", (req, res) => {
-    try {
-      const { skuCode } = req.body;
-      const row = db.prepare("SELECT * FROM inventory WHERE id = ?").get(skuCode);
-      res.json(row || {});
-    } catch (err) {
-      res.status(500).send(err.message);
-    }
-  });
-
-  // Decrement inventory
-  app.decrementInventory = function (products) {
-    try {
-      for (const transactionProduct of products) {
-        const product = db.prepare("SELECT * FROM inventory WHERE id = ?").get(transactionProduct.id);
-        if (!product) continue;
-        const updatedQuantity = parseInt(product.quantity || 0) - parseInt(transactionProduct.quantity);
-        db.prepare("UPDATE inventory SET quantity = ? WHERE id = ?").run(updatedQuantity, product.id);
-      }
-    } catch (err) {
-      console.error("Error decrementing inventory:", err.message);
-    }
-  };
 
   return app;
 }

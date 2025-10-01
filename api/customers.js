@@ -1,21 +1,10 @@
 // api/customers.js
 import express from "express";
 import bodyParser from "body-parser";
-import db from "../db/db.js"; // <-- better-sqlite3 connection
+import db from "../db/db.js"; // better-sqlite3 connection
 
 const app = express();
 app.use(bodyParser.json());
-
-// Create customers table if not exists
-db.prepare(`
-  CREATE TABLE IF NOT EXISTS customers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    email TEXT,
-    phone TEXT,
-    address TEXT
-  )
-`).run();
 
 // Test route
 app.get("/", (req, res) => {
@@ -56,7 +45,7 @@ app.post("/customer", (req, res) => {
     );
     const result = stmt.run(name, email, phone, address);
 
-    res.json({ id: result.lastInsertRowid, name, email, phone, address });
+    res.json({ id: result.lastInsertRowid, name, email, phone, address});
   } catch (err) {
     res.status(500).send(err.message);
   }
@@ -83,10 +72,11 @@ app.put("/customer", (req, res) => {
   if (!id) return res.status(400).send("ID field is required.");
 
   try {
+    const now = new Date().toISOString();
     const stmt = db.prepare(
-      "UPDATE customers SET name = ?, email = ?, phone = ?, address = ? WHERE id = ?"
+      "UPDATE customers SET name = ?, email = ?, phone = ?, address = ?, updated_at = ? WHERE id = ?"
     );
-    const result = stmt.run(name, email, phone, address, id);
+    const result = stmt.run(name, email, phone, address, now, id);
 
     if (result.changes === 0) return res.status(404).send("Customer not found");
     res.sendStatus(200);

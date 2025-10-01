@@ -6,29 +6,12 @@ import db from "../db/db.js"; // <-- better-sqlite3 connection
 const app = express();
 app.use(bodyParser.json());
 
-// Create settings table if not exists
-db.prepare(`
-  CREATE TABLE IF NOT EXISTS settings (
-    id INTEGER PRIMARY KEY,
-    app TEXT,
-    store TEXT,
-    address_one TEXT,
-    address_two TEXT,
-    contact TEXT,
-    tax REAL,
-    symbol TEXT,
-    percentage REAL,
-    charge_tax INTEGER,
-    footer TEXT,
-    img TEXT
-  )
-`).run();
-
 // Routes
 app.get("/", (req, res) => {
   res.send("Settings API (better-sqlite3, no uploads)");
 });
 
+// Fetch settings (always ID = 1)
 app.get("/get", (req, res) => {
   try {
     let row = db.prepare(`SELECT * FROM settings WHERE id = 1`).get();
@@ -37,7 +20,7 @@ app.get("/get", (req, res) => {
       row = {};
     }
 
-    // Always use default logo
+    // Always return default logo if none
     row.img = "assets/images/logo.png";
 
     res.json(row);
@@ -46,7 +29,10 @@ app.get("/get", (req, res) => {
   }
 });
 
+// Insert or update settings
 app.post("/post", (req, res) => {
+  const now = new Date().toISOString();
+
   const settingsData = {
     id: 1,
     app: req.body.app,
@@ -59,13 +45,14 @@ app.post("/post", (req, res) => {
     percentage: req.body.percentage,
     charge_tax: req.body.charge_tax,
     footer: req.body.footer,
-    img: "assets/images/logo.png" // always fallback
+    img: "assets/images/logo.png", // always fallback
+    updated_at: now
   };
 
   try {
     db.prepare(`
-      INSERT INTO settings (id, app, store, address_one, address_two, contact, tax, symbol, percentage, charge_tax, footer, img)
-      VALUES (@id, @app, @store, @address_one, @address_two, @contact, @tax, @symbol, @percentage, @charge_tax, @footer, @img)
+      INSERT INTO settings (id, app, store, address_one, address_two, contact, tax, symbol, percentage, charge_tax, footer, img, updated_at)
+      VALUES (@id, @app, @store, @address_one, @address_two, @contact, @tax, @symbol, @percentage, @charge_tax, @footer, @img, @updated_at)
       ON CONFLICT(id) DO UPDATE SET
         app = excluded.app,
         store = excluded.store,
@@ -77,7 +64,8 @@ app.post("/post", (req, res) => {
         percentage = excluded.percentage,
         charge_tax = excluded.charge_tax,
         footer = excluded.footer,
-        img = excluded.img
+        img = excluded.img,
+        updated_at = excluded.updated_at
     `).run(settingsData);
 
     res.sendStatus(200);
