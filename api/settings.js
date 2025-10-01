@@ -1,111 +1,89 @@
-const app = require( "express")();
-const server = require( "http" ).Server( app );
-const bodyParser = require( "body-parser" );
-const Datastore = require( "nedb" );
-const multer = require("multer");
-const fileUpload = require('express-fileupload');
-const fs = require('fs');
+// api/settings.js
+import express from "express";
+import bodyParser from "body-parser";
+import db from "../db/db.js"; // <-- better-sqlite3 connection
 
+const app = express();
+app.use(bodyParser.json());
 
-const storage = multer.diskStorage({
-    destination:  process.env.APPDATA+'/POS/uploads',
-    filename: function(req, file, callback){
-        callback(null, Date.now() + '.jpg'); // 
-    }
+// Create settings table if not exists
+db.prepare(`
+  CREATE TABLE IF NOT EXISTS settings (
+    id INTEGER PRIMARY KEY,
+    app TEXT,
+    store TEXT,
+    address_one TEXT,
+    address_two TEXT,
+    contact TEXT,
+    tax REAL,
+    symbol TEXT,
+    percentage REAL,
+    charge_tax INTEGER,
+    footer TEXT,
+    img TEXT
+  )
+`).run();
+
+// Routes
+app.get("/", (req, res) => {
+  res.send("Settings API (better-sqlite3, no uploads)");
 });
 
-let upload = multer({storage: storage});
+app.get("/get", (req, res) => {
+  try {
+    let row = db.prepare(`SELECT * FROM settings WHERE id = 1`).get();
 
-app.use( bodyParser.json() );
-
-module.exports = app;
-
- 
-let settingsDB = new Datastore( {
-    filename: process.env.APPDATA+"/POS/server/databases/settings.db",
-    autoload: true
-} );
-
-
-
-app.get( "/", function ( req, res ) {
-    res.send( "Settings API" );
-} );
-
-
-  
-app.get( "/get", function ( req, res ) {
-    settingsDB.findOne( {
-        _id: 1
-}, function ( err, docs ) {
-        res.send( docs );
-    } );
-} );
-
- 
-app.post( "/post", upload.single('imagename'), function ( req, res ) {
-
-    let image = '';
-
-    if(req.body.img != "") {
-        image = req.body.img;       
+    if (!row) {
+      row = {};
     }
 
-    if(req.file) {
-        image = req.file.filename;  
-    }
+    // Always use default logo
+    row.img = "assets/images/logo.png";
 
-    if(req.body.remove == 1) {
-        const path = process.env.APPDATA+"/POS/uploads/"+ req.body.img;
-        try {
-          fs.unlinkSync(path)
-        } catch(err) {
-          console.error(err)
-        }
-
-        if(!req.file) {
-            image = '';
-        }
-    } 
-    
-  
-    let Settings = {  
-        _id: 1,
-        settings: {
-            "app": req.body.app,
-            "store": req.body.store,
-            "address_one": req.body.address_one,
-            "address_two":req.body.address_two,
-            "contact": req.body.contact,
-            "tax": req.body.tax,
-            "symbol": req.body.symbol,
-            "percentage": req.body.percentage,
-            "charge_tax": req.body.charge_tax,
-            "footer": req.body.footer,
-            "img": image
-        }       
-    }
-
-    if(req.body.id == "") { 
-        settingsDB.insert( Settings, function ( err, settings ) {
-            if ( err ) res.status( 500 ).send( err );
-            else res.send( settings );
-        });
-    }
-    else { 
-        settingsDB.update( {
-            _id: 1
-        }, Settings, {}, function (
-            err,
-            numReplaced,
-            settings
-        ) {
-            if ( err ) res.status( 500 ).send( err );
-            else res.sendStatus( 200 );
-        } );
-
-    }
-
+    res.json(row);
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
 });
 
- 
+app.post("/post", (req, res) => {
+  const settingsData = {
+    id: 1,
+    app: req.body.app,
+    store: req.body.store,
+    address_one: req.body.address_one,
+    address_two: req.body.address_two,
+    contact: req.body.contact,
+    tax: req.body.tax,
+    symbol: req.body.symbol,
+    percentage: req.body.percentage,
+    charge_tax: req.body.charge_tax,
+    footer: req.body.footer,
+    img: "assets/images/logo.png" // always fallback
+  };
+
+  try {
+    db.prepare(`
+      INSERT INTO settings (id, app, store, address_one, address_two, contact, tax, symbol, percentage, charge_tax, footer, img)
+      VALUES (@id, @app, @store, @address_one, @address_two, @contact, @tax, @symbol, @percentage, @charge_tax, @footer, @img)
+      ON CONFLICT(id) DO UPDATE SET
+        app = excluded.app,
+        store = excluded.store,
+        address_one = excluded.address_one,
+        address_two = excluded.address_two,
+        contact = excluded.contact,
+        tax = excluded.tax,
+        symbol = excluded.symbol,
+        percentage = excluded.percentage,
+        charge_tax = excluded.charge_tax,
+        footer = excluded.footer,
+        img = excluded.img
+    `).run(settingsData);
+
+    res.sendStatus(200);
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
+
+export default app;

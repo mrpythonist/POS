@@ -1,148 +1,165 @@
-let app = require("express")();
-let server = require("http").Server(app);
-let bodyParser = require("body-parser");
-let Datastore = require("nedb");
-let Inventory = require("./inventory");
+// api/transactions.js
+import express from "express";
+import bodyParser from "body-parser";
+import db from "../db/db.js";
+import path from "path";
+import Inventory from "./inventory.js";
 
+const app = express();
 app.use(bodyParser.json());
 
-module.exports = app;
- 
-let transactionsDB = new Datastore({
-  filename: process.env.APPDATA+"/POS/server/databases/transactions.db",
-  autoload: true
+// Ensure transactions table exists
+db.prepare(`
+  CREATE TABLE IF NOT EXISTS transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ref_number TEXT,
+    status INTEGER,
+    customer TEXT,
+    date TEXT,
+    user_id INTEGER,
+    till INTEGER,
+    total REAL,
+    paid REAL,
+    items TEXT
+  )
+`).run();
+
+// Routes
+app.get("/", (req, res) => {
+  res.send("Transactions API (better-sqlite3)");
 });
 
-
-transactionsDB.ensureIndex({ fieldName: '_id', unique: true });
-
-app.get("/", function(req, res) {
-  res.send("Transactions API");
+app.get("/all", (req, res) => {
+  try {
+    const rows = db.prepare("SELECT * FROM transactions").all();
+    res.json(rows);
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
 });
 
- 
-app.get("/all", function(req, res) {
-  transactionsDB.find({}, function(err, docs) {
-    res.send(docs);
-  });
+app.get("/on-hold", (req, res) => {
+  try {
+    const rows = db.prepare("SELECT * FROM transactions WHERE ref_number != '' AND status = 0").all();
+    res.json(rows);
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
 });
 
+app.get("/customer-orders", (req, res) => {
+  try {
+    const rows = db.prepare("SELECT * FROM transactions WHERE customer != '0' AND status = 0 AND ref_number = ''").all();
+    res.json(rows);
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
 
+app.get("/by-date", (req, res) => {
+  try {
+    let startDate = new Date(req.query.start).toJSON();
+    let endDate = new Date(req.query.end).toJSON();
+    let status = parseInt(req.query.status);
+    let user = parseInt(req.query.user);
+    let till = parseInt(req.query.till);
 
- 
-app.get("/on-hold", function(req, res) {
-  transactionsDB.find(
-    { $and: [{ ref_number: {$ne: ""}}, { status: 0  }]},    
-    function(err, docs) {
-      if (docs) res.send(docs);
+    let query = "SELECT * FROM transactions WHERE date >= ? AND date <= ? AND status = ?";
+    let params = [startDate, endDate, status];
+
+    if (user !== 0) {
+      query += " AND user_id = ?";
+      params.push(user);
     }
-  );
-});
-
-
-
-app.get("/customer-orders", function(req, res) {
-  transactionsDB.find(
-    { $and: [{ customer: {$ne: "0"} }, { status: 0}, { ref_number: ""}]},
-    function(err, docs) {
-      if (docs) res.send(docs);
+    if (till !== 0) {
+      query += " AND till = ?";
+      params.push(till);
     }
-  );
+
+    const rows = db.prepare(query).all(...params);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
 });
 
+app.post("/new", (req, res) => {
+  try {
+    const t = req.body;
 
-
-app.get("/by-date", function(req, res) {
-
-  let startDate = new Date(req.query.start);
-  let endDate = new Date(req.query.end);
-
-  if(req.query.user == 0 && req.query.till == 0) {
-      transactionsDB.find(
-        { $and: [{ date: { $gte: startDate.toJSON(), $lte: endDate.toJSON() }}, { status: parseInt(req.query.status) }] },
-        function(err, docs) {
-          if (docs) res.send(docs);
-        }
-      );
-  }
-
-  if(req.query.user != 0 && req.query.till == 0) {
-    transactionsDB.find(
-      { $and: [{ date: { $gte: startDate.toJSON(), $lte: endDate.toJSON() }}, { status: parseInt(req.query.status) }, { user_id: parseInt(req.query.user) }] },
-      function(err, docs) {
-        if (docs) res.send(docs);
-      }
+    db.prepare(`
+      INSERT INTO transactions (id, ref_number, status, customer, date, user_id, till, total, paid, items)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      t.id,
+      t.ref_number || "",
+      t.status || 0,
+      t.customer || "0",
+      t.date || new Date().toJSON(),
+      t.user_id || 0,
+      t.till || 0,
+      t.total || 0,
+      t.paid || 0,
+      JSON.stringify(t.items || [])
     );
-  }
 
-  if(req.query.user == 0 && req.query.till != 0) {
-    transactionsDB.find(
-      { $and: [{ date: { $gte: startDate.toJSON(), $lte: endDate.toJSON() }}, { status: parseInt(req.query.status) }, { till: parseInt(req.query.till) }] },
-      function(err, docs) {
-        if (docs) res.send(docs);
-      }
-    );
-  }
-
-  if(req.query.user != 0 && req.query.till != 0) {
-    transactionsDB.find(
-      { $and: [{ date: { $gte: startDate.toJSON(), $lte: endDate.toJSON() }}, { status: parseInt(req.query.status) }, { till: parseInt(req.query.till) }, { user_id: parseInt(req.query.user) }] },
-      function(err, docs) {
-        if (docs) res.send(docs);
-      }
-    );
-  }
-
-});
-
-
-
-app.post("/new", function(req, res) {
-  let newTransaction = req.body;
-  transactionsDB.insert(newTransaction, function(err, transaction) {    
-    if (err) res.status(500).send(err);
-    else {
-     res.sendStatus(200);
-
-     if(newTransaction.paid >= newTransaction.total){
-        Inventory.decrementInventory(newTransaction.items);
-     }
-     
+    if (t.paid >= t.total && Array.isArray(t.items)) {
+      Inventory.decrementInventory(t.items);
     }
-  });
+
+    res.sendStatus(200);
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
 });
 
+app.put("/new", (req, res) => {
+  try {
+    const t = req.body;
 
+    const changes = db.prepare(`
+      UPDATE transactions
+      SET ref_number = ?, status = ?, customer = ?, date = ?, user_id = ?, till = ?, total = ?, paid = ?, items = ?
+      WHERE id = ?
+    `).run(
+      t.ref_number || "",
+      t.status || 0,
+      t.customer || "0",
+      t.date || new Date().toJSON(),
+      t.user_id || 0,
+      t.till || 0,
+      t.total || 0,
+      t.paid || 0,
+      JSON.stringify(t.items || []),
+      t.id
+    ).changes;
 
-app.put("/new", function(req, res) {
-  let oderId = req.body._id;
-  transactionsDB.update( {
-      _id: oderId
-  }, req.body, {}, function (
-      err,
-      numReplaced,
-      order
-  ) {
-      if ( err ) res.status( 500 ).send( err );
-      else res.sendStatus( 200 );
-  } );
+    if (changes === 0) return res.status(404).send("Transaction not found");
+    res.sendStatus(200);
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
 });
 
-
-app.post( "/delete", function ( req, res ) {
- let transaction = req.body;
-  transactionsDB.remove( {
-      _id: transaction.orderId
-  }, function ( err, numRemoved ) {
-      if ( err ) res.status( 500 ).send( err );
-      else res.sendStatus( 200 );
-  } );
-} );
-
-
-
-app.get("/:transactionId", function(req, res) {
-  transactionsDB.find({ _id: req.params.transactionId }, function(err, doc) {
-    if (doc) res.send(doc[0]);
-  });
+app.post("/delete", (req, res) => {
+  try {
+    const orderId = req.body.orderId;
+    console.log(orderId);
+    const changes = db.prepare("DELETE FROM transactions WHERE id = ?").run(orderId).changes;
+    if (changes === 0) return res.status(404).send("Transaction not found");
+    res.sendStatus(200);
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
 });
+
+app.get("/:transactionId", (req, res) => {
+  try {
+    const row = db.prepare("SELECT * FROM transactions WHERE id = ?").get(req.params.transactionId);
+    res.json(row || {});
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
+
+export default app;

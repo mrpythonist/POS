@@ -1,3 +1,12 @@
+// --- ESM imports ---
+// // Browser-safe ESM imports via CDN
+// import moment from "https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js";
+// import Swal from "https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js";
+// import html2canvas from "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
+// import jsPDF from "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js";
+
+
+// --- Variables ---
 let cart = [];
 let index = 0;
 let allUsers = [];
@@ -11,55 +20,53 @@ let item;
 let auth;
 let holdOrder = 0;
 let vat = 0;
-let perms = null;
+// let perms = null;
 let deleteId = 0;
 let paymentType = 0;
 let receipt = '';
 let totalVat = 0;
 let subTotal = 0;
 let method = '';
-let order_index = 0;
+// let order_index = 0;
 let user_index = 0;
-let product_index = 0;
-let transaction_index;
+// let product_index = 0;
+// let transaction_index;
 let host = 'localhost';
-let path = require('path');
 let port = '8001';
-let moment = require('moment');
-let Swal = require('sweetalert2');
-let { ipcRenderer } = require('electron');
-let dotInterval = setInterval(function () { $(".dot").text('.') }, 3000);
-let Store = require('electron-store');
-const remote = require('electron').remote;
-const app = remote.app;
-let img_path = app.getPath('appData') + '/POS/uploads/';
-let api = 'http://' + host + ':' + port + '/api/';
-let btoa = require('btoa');
-let jsPDF = require('jspdf');
-let html2canvas = require('html2canvas');
-let JsBarcode = require('jsbarcode');
-let macaddress = require('macaddress');
+let dotInterval = setInterval(() => {
+  $(".dot").text(".");
+}, 3000);
+
+// --- App-specific ---
+let storage = {
+  get: (key) => window.api.storeGet(key),
+  set: (key, value) => window.api.storeSet(key, value),
+  delete: (key) => window.api.storeDelete(key),
+};
+
+let api = `http://${host}:${port}/api/`;
+
 let categories = [];
 let holdOrderList = [];
 let customerOrderList = [];
 let ownUserEdit = null;
 let totalPrice = 0;
 let orderTotal = 0;
-let auth_error = 'Incorrect username or password';
-let auth_empty = 'Please enter a username and password';
+let auth_error = "Incorrect username or password";
+let auth_empty = "Please enter a username and password";
 let holdOrderlocation = $("#randerHoldOrders");
 let customerOrderLocation = $("#randerCustomerOrders");
-let storage = new Store();
 let settings;
 let platform;
 let user = {};
-let start = moment().startOf('month');
+let start = moment().startOf("month");
 let end = moment();
 let start_date = moment(start).toDate();
 let end_date = moment(end).toDate();
 let by_till = 0;
 let by_user = 0;
 let by_status = 1;
+
 
 $(function () {
 
@@ -108,87 +115,112 @@ $.fn.serializeObject = function () {
     return o;
 };
 
-
+// --- Load auth and user from storage ---
 auth = storage.get('auth');
 user = storage.get('user');
 
+// --- Function declarations (hoisted, so can be called anywhere) ---
 
-if (auth == undefined) {
-    $.get(api + 'users/check/', function (data) { });
-    $("#loading").show();
-    authenticate();
-
-} else {
-
-    $('#loading').show();
-
-    setTimeout(function () {
-        $('#loading').hide();
-    }, 2000);
-
-    platform = storage.get('settings');
-
-    if (platform != undefined) {
-
-        if (platform.app == 'Network Point of Sale Terminal') {
-            api = 'http://' + platform.ip + ':' + port + '/api/';
-            perms = true;
+// Load settings from API
+function loadSettings() {
+    $.get(api + 'settings/get', function(data) {
+        if ($.isEmptyObject(data)) {
+            settings = undefined;
+        } else {
+            settings = data;
+            updateSettingsUI();
         }
+        checkSettingsModal();
+    }).fail(function(err) {
+        console.error("Failed to load settings:", err);
+    });
+}
+
+// Update UI with settings
+function updateSettingsUI() {
+    if (!settings) return;
+
+    if (settings.symbol) {
+        $("#price_curr, #payment_curr, #change_curr").text(settings.symbol);
     }
 
-    $.get(api + 'users/user/' + user._id, function (data) {
+    const vat = parseFloat(settings.percentage);
+    $("#taxInfo").text(settings.charge_tax ? vat : 0);
+}
+
+// Show modal if settings missing
+function checkSettingsModal() {
+    if (!settings && typeof auth !== "undefined") {
+        $("#settingsModal").modal("show");
+    }
+}
+
+// --- Main logic ---
+if (!auth) {
+    $("#loading").show();
+    $.get(api + 'users/check/'); // initial check
+    authenticate();
+} else {
+    // Auth exists
+    $('#loading').show();
+    setTimeout(() => $('#loading').hide(), 2000);
+
+    platform = storage.get('settings');
+    if (platform && platform.app === 'Network Point of Sale Terminal') {
+        api = 'http://' + platform.ip + ':' + port + '/api/';
+        perms = true;
+    }
+
+    // Load user details
+    $.get(api + 'users/user/' + user.id, function(data) {
         user = data;
         $('#loggedin-user').text(user.fullname);
     });
 
+    // Load settings AFTER function is defined
+    loadSettings();
 
-    $.get(api + 'settings/get', function (data) {
-        settings = data.settings;
-    });
-
-
-    $.get(api + 'users/all', function (users) {
+    // Load all users
+    $.get(api + 'users/all', function(users) {
         allUsers = [...users];
     });
 
-
-
-    $(document).ready(function () {
-
+    // Initialize the rest of the UI once document is ready
+    $(document).ready(function() {
         $(".loading").hide();
 
         loadCategories();
         loadProducts();
         loadCustomers();
+    
 
+    // --- Handle settings form submission ---
+    $("#settingsForm").on("submit", function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
 
-        if (settings && settings.symbol) {
-            $("#price_curr, #payment_curr, #change_curr").text(settings.symbol);
-        }
-
-
-        setTimeout(function () {
-            if (settings == undefined && auth != undefined) {
-                $('#settingsModal').modal('show');
+        $.ajax({
+            url: "/api/settings/post",
+            type: "POST",
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function() {
+                loadSettings(); // reload settings
+                $("#settingsModal").modal("hide");
+            },
+            error: function(err) {
+                console.error("Settings save failed:", err);
             }
-            else {
-                vat = parseFloat(settings.percentage);
-                $("#taxInfo").text(settings.charge_tax ? vat : 0);
-            }
-
-        }, 1500);
-
-
-
-        $("#settingsModal").on("hide.bs.modal", function () {
-
-            setTimeout(function () {
-                if (settings == undefined && auth != undefined) {
-                    $('#settingsModal').modal('show');
-                }
-            }, 1000);
-
         });
+    });
+
+    // --- Modal hide event ---
+    $("#settingsModal").on("hide.bs.modal", function() {
+        setTimeout(checkSettingsModal, 500);
+    });
+
+
 
 
         if (0 == user.perm_products) { $(".p_one").hide() };
@@ -197,9 +229,9 @@ if (auth == undefined) {
         if (0 == user.perm_users) { $(".p_four").hide() };
         if (0 == user.perm_settings) { $(".p_five").hide() };
 
-        function loadProducts() {
-
-            $.get(api + 'inventory/products', function (data) {
+        async function loadProducts() {
+            try {
+                const data = await $.get(api + 'inventory/products');
 
                 data.forEach(item => {
                     item.price = parseFloat(item.price).toFixed(2);
@@ -210,39 +242,48 @@ if (auth == undefined) {
                 loadProductList();
 
                 $('#parent').text('');
-                $('#categories').html(`<button type="button" id="all" class="btn btn-categories btn-white waves-effect waves-light">All</button> `);
+                $('#categories').html(`<button type="button" id="all" class="btn btn-categories btn-white waves-effect waves-light">All</button>`);
 
-                data.forEach(item => {
-
+                for (const item of data) {
                     if (!categories.includes(item.category)) {
                         categories.push(item.category);
                     }
 
-                    let item_info = `<div class="col-lg-2 box ${item.category}"
-                                onclick="$(this).addToCart(${item._id}, ${item.quantity}, ${item.stock})">
-                            <div class="widget-panel widget-style-2 ">                    
-                            <div id="image"><img src="${item.img == "" ? "./assets/images/default.jpg" : img_path + item.img}" id="product_img" alt=""></div>                    
-                                        <div class="text-muted m-t-5 text-center">
-                                        <div class="name" id="product_name">${item.name}</div> 
-                                        <span class="sku">${item.sku}</span>
-                                        <span class="stock">STOCK </span><span class="count">${item.stock == 1 ? item.quantity : 'N/A'}</span></div>
-                                        <sp class="text-success text-center"><b data-plugin="counterup">${settings.symbol + item.price}</b> </sp>
+                    let imgUrl = "./assets/images/default.jpg"; // fallback
+                    if (item.img) {
+                        imgUrl = `${api}images/${item.img}`; // served by express
+                    }
+
+
+                    const item_info = `
+                        <div class="col-lg-2 box ${item.category}" onclick="$(this).addToCart(${item.id}, ${item.quantity}, ${item.stock})">
+                            <div class="widget-panel widget-style-2">                    
+                                <div id="image">
+                                    <img src="${imgUrl}" id="product_img" alt="">
+                                </div>                    
+                                <div class="text-muted m-t-5 text-center">
+                                    <div class="name" id="product_name">${item.name}</div> 
+                                    <span class="sku">${item.sku || ''}</span>
+                                    <span class="stock">STOCK </span>
+                                    <span class="count">${item.stock == 1 ? item.quantity : 'N/A'}</span>
+                                </div>
+                                <sp class="text-success text-center">
+                                    <b data-plugin="counterup">${settings.symbol + item.price}</b>
+                                </sp>
                             </div>
                         </div>`;
+
                     $('#parent').append(item_info);
-                });
+                }
 
                 categories.forEach(category => {
-
-                    let c = allCategories.filter(function (ctg) {
-                        return ctg._id == category;
-                    })
-
-                    $('#categories').append(`<button type="button" id="${category}" class="btn btn-categories btn-white waves-effect waves-light">${c.length > 0 ? c[0].name : ''}</button> `);
+                    const c = allCategories.filter(ctg => ctg.id == category);
+                    $('#categories').append(`<button type="button" id="${category}" class="btn btn-categories btn-white waves-effect waves-light">${c.length > 0 ? c[0].name : ''}</button>`);
                 });
 
-            });
-
+            } catch (err) {
+                console.error("Error loading products:", err);
+            }
         }
 
         function loadCategories() {
@@ -251,7 +292,7 @@ if (auth == undefined) {
                 loadCategoryList();
                 $('#category').html(`<option value="0">Select</option>`);
                 allCategories.forEach(category => {
-                    $('#category').append(`<option value="${category._id}">${category.name}</option>`);
+                    $('#category').append(`<option value="${category.id}">${category.name}</option>`);
                 });
             });
         }
@@ -265,7 +306,7 @@ if (auth == undefined) {
 
                 customers.forEach(cust => {
 
-                    let customer = `<option value='{"id": ${cust._id}, "name": "${cust.name}"}'>${cust.name}</option>`;
+                    let customer = `<option value='{"id": ${cust.id}, "name": "${cust.name}"}'>${cust.name}</option>`;
                     $('#customer').append(customer);
                 });
 
@@ -322,7 +363,7 @@ if (auth == undefined) {
                 processData: false,
                 success: function (data) {
 
-                    if (data._id != undefined && data.quantity >= 1) {
+                    if (data.id != undefined && data.quantity >= 1) {
                         $(this).addProductToCart(data);
                         $("#searchBarCode").get(0).reset();
                         $("#basic-addon2").empty();
@@ -395,7 +436,7 @@ if (auth == undefined) {
 
         $.fn.addProductToCart = function (data) {
             item = {
-                id: data._id,
+                id: data.id,
                 product_name: data.name,
                 sku: data.sku,
                 price: data.price,
@@ -471,9 +512,9 @@ if (auth == undefined) {
                         $('<td>', { text: data.product_name }),
                         $('<td>').append(
                             $('<div>', { class: 'input-group' }).append(
-                                $('<div>', { class: 'input-group-btn btn-xs' }).append(
+                                $('<div>', { class: 'input-group-btn btn-sm' }).append(
                                     $('<button>', {
-                                        class: 'btn btn-default btn-xs',
+                                        class: 'btn btn-default btn-sm',
                                         onclick: '$(this).qtDecrement(' + index + ')'
                                     }).append(
                                         $('<i>', { class: 'fa fa-minus' })
@@ -481,13 +522,14 @@ if (auth == undefined) {
                                 ),
                                 $('<input>', {
                                     class: 'form-control',
-                                    type: 'number',
+                                    type: 'text',
                                     value: data.quantity,
+                                    disabled: true,
                                     onInput: '$(this).qtInput(' + index + ')'
                                 }),
-                                $('<div>', { class: 'input-group-btn btn-xs' }).append(
+                                $('<div>', { class: 'input-group-btn btn-sm' }).append(
                                     $('<button>', {
-                                        class: 'btn btn-default btn-xs',
+                                        class: 'btn btn-default btn-sm',
                                         onclick: '$(this).qtIncrement(' + index + ')'
                                     }).append(
                                         $('<i>', { class: 'fa fa-plus' })
@@ -522,7 +564,7 @@ if (auth == undefined) {
             item = cart[i];
 
             let product = allProducts.filter(function (selected) {
-                return selected._id == parseInt(item.id);
+                return selected.id == parseInt(item.id);
             });
 
             if (product[0].stock == 1) {
@@ -725,7 +767,7 @@ if (auth == undefined) {
 
             receipt = `<div style="font-size: 10px;">                            
         <p style="text-align: center;">
-        ${settings.img == "" ? settings.img : '<img style="max-width: 50px;max-width: 100px;" src ="' + img_path + settings.img + '" /><br>'}
+        ${settings.img == "" ? settings.img : '<img style="max-width: 50px;max-width: 100px;" src ="' + settings.img + '" /><br>'}
             <span style="font-size: 22px;">${settings.store}</span> <br>
             ${settings.address_one} <br>
             ${settings.address_two} <br>
@@ -820,11 +862,11 @@ if (auth == undefined) {
                 total: orderTotal,
                 paid: paid,
                 change: change,
-                _id: orderNumber,
+                id: orderNumber,
                 till: platform.till,
                 mac: platform.mac,
                 user: user.fullname,
-                user_id: user._id
+                user_id: user.id
             }
 
 
@@ -853,7 +895,7 @@ if (auth == undefined) {
                 }, error: function (data) {
                     $(".loading").hide();
                     $("#dueModal").modal('toggle');
-                    swal("Something went wrong!", 'Please refresh this page and try again');
+                    Swal("Something went wrong!", 'Please refresh this page and try again');
 
                 }
             });
@@ -945,10 +987,17 @@ if (auth == undefined) {
                     return $(this).text() == "Walk in customer";
                 }).prop("selected", true);
 
-                holdOrder = holdOrderList[index]._id;
+                holdOrder = holdOrderList[index].id;
                 cart = [];
-                $.each(holdOrderList[index].items, function (index, product) {
-                    item = {
+
+                // Parse items safely
+                let items = holdOrderList[index].items;
+                if (typeof items === "string") {
+                    try { items = JSON.parse(items); } catch(e) { items = []; }
+                }
+
+                $.each(items, function (i, product) {
+                    let item = {
                         id: product.id,
                         product_name: product.product_name,
                         sku: product.sku,
@@ -956,7 +1005,8 @@ if (auth == undefined) {
                         quantity: product.quantity
                     };
                     cart.push(item);
-                })
+                });
+
             } else if (orderType == 2) {
 
                 $('#refNumber').val('');
@@ -967,11 +1017,17 @@ if (auth == undefined) {
                     return $(this).text() == customerOrderList[index].customer.name;
                 }).prop("selected", true);
 
-
-                holdOrder = customerOrderList[index]._id;
+                holdOrder = customerOrderList[index].id;
                 cart = [];
-                $.each(customerOrderList[index].items, function (index, product) {
-                    item = {
+
+                // Parse items safely
+                let items = customerOrderList[index].items;
+                if (typeof items === "string") {
+                    try { items = JSON.parse(items); } catch(e) { items = []; }
+                }
+
+                $.each(items, function (i, product) {
+                    let item = {
                         id: product.id,
                         product_name: product.product_name,
                         sku: product.sku,
@@ -979,8 +1035,9 @@ if (auth == undefined) {
                         quantity: product.quantity
                     };
                     cart.push(item);
-                })
+                });
             }
+
             $(this).renderTable(cart);
             $("#holdOrdersModal").modal('hide');
             $("#customerModal").modal('hide');
@@ -990,9 +1047,9 @@ if (auth == undefined) {
         $.fn.deleteOrder = function (index, type) {
 
             switch (type) {
-                case 1: deleteId = holdOrderList[index]._id;
+                case 1: deleteId = holdOrderList[index].id;
                     break;
-                case 2: deleteId = customerOrderList[index]._id;
+                case 2: deleteId = customerOrderList[index].id;
             }
 
             let data = {
@@ -1055,7 +1112,7 @@ if (auth == undefined) {
             e.preventDefault();
 
             let custData = {
-                _id: Math.floor(Date.now() / 1000),
+                id: Math.floor(Date.now() / 1000),
                 name: $('#userName').val(),
                 phone: $('#phoneNumber').val(),
                 email: $('#emailAddress').val(),
@@ -1074,10 +1131,10 @@ if (auth == undefined) {
                     Swal.fire("Customer added!", "Customer added successfully!", "success");
                     $("#customer option:selected").removeAttr('selected');
                     $('#customer').append(
-                        $('<option>', { text: custData.name, value: `{"id": ${custData._id}, "name": ${custData.name}}`, selected: 'selected' })
+                        $('<option>', { text: custData.name, value: `{"id": ${custData.id}, "name": ${custData.name}}`, selected: 'selected' })
                     );
 
-                    $('#customer').val(`{"id": ${custData._id}, "name": ${custData.name}}`).trigger('chosen:updated');
+                    $('#customer').val(`{"id": ${custData.id}, "name": ${custData.name}}`).trigger('chosen:updated');
 
                 }, error: function (data) {
                     $("#newCustomer").modal('hide');
@@ -1243,13 +1300,13 @@ if (auth == undefined) {
             $('#product_price').val(allProducts[index].price);
             $('#quantity').val(allProducts[index].quantity);
 
-            $('#product_id').val(allProducts[index]._id);
+            $('#product_id').val(allProducts[index].id);
             $('#img').val(allProducts[index].img);
 
             if (allProducts[index].img != "") {
 
                 $('#imagename').hide();
-                $('#current_img').html(`<img src="${img_path + allProducts[index].img}" alt="">`);
+                $('#current_img').html(`<img src="${ allProducts[index].img}" alt="">`);
                 $('#rmv_img').show();
             }
 
@@ -1274,7 +1331,7 @@ if (auth == undefined) {
 
             $('.perms').show();
 
-            $("#user_id").val(allUsers[index]._id);
+            $("#user_id").val(allUsers[index].id);
             $('#fullname').val(allUsers[index].fullname);
             $('#username').val(allUsers[index].username);
             $('#password').val(atob(allUsers[index].password));
@@ -1321,7 +1378,7 @@ if (auth == undefined) {
         $.fn.editCategory = function (index) {
             $('#Categories').modal('hide');
             $('#categoryName').val(allCategories[index].name);
-            $('#category_id').val(allCategories[index]._id);
+            $('#category_id').val(allCategories[index].id);
             $('#newCategory').modal('show');
         }
 
@@ -1468,7 +1525,7 @@ if (auth == undefined) {
             <td>${user.fullname}</td>
             <td>${user.username}</td>
             <td class="${class_name}">${state.length > 0 ? state[0] : ''} <br><span style="font-size: 11px;"> ${state.length > 0 ? moment(state[1]).format('hh:mm A DD MMM YYYY') : ''}</span></td>
-            <td>${user._id == 1 ? '<span class="btn-group"><button class="btn btn-dark"><i class="fa fa-edit"></i></button><button class="btn btn-dark"><i class="fa fa-trash"></i></button></span>' : '<span class="btn-group"><button onClick="$(this).editUser(' + index + ')" class="btn btn-warning"><i class="fa fa-edit"></i></button><button onClick="$(this).deleteUser(' + user._id + ')" class="btn btn-danger"><i class="fa fa-trash"></i></button></span>'}</td></tr>`;
+            <td>${user.id == 1 ? '<span class="btn-group"><button class="btn btn-dark"><i class="fa fa-edit"></i></button><button class="btn btn-dark"><i class="fa fa-trash"></i></button></span>' : '<span class="btn-group"><button onClick="$(this).editUser(' + index + ')" class="btn btn-warning"><i class="fa fa-edit"></i></button><button onClick="$(this).deleteUser(' + user.id + ')" class="btn btn-danger"><i class="fa fa-trash"></i></button></span>'}</td></tr>`;
 
                     if (counter == users.length) {
 
@@ -1490,55 +1547,75 @@ if (auth == undefined) {
         }
 
 
-        function loadProductList() {
+        async function loadProductList() {
             let products = [...allProducts];
             let product_list = '';
-            let counter = 0;
             $('#product_list').empty();
-            $('#productList').DataTable().destroy();
 
-            products.forEach((product, index) => {
+            if ($.fn.DataTable.isDataTable('#productList')) {
+                $('#productList').DataTable().destroy();
+            }
 
-                counter++;
+            for (let index = 0; index < products.length; index++) {
+                const product = products[index];
 
-                let category = allCategories.filter(function (category) {
-                    return category._id == product.category;
-                });
-
-
-                product_list += `<tr>
-            <td><img id="`+ product._id + `"></td>
-            <td><img style="max-height: 50px; max-width: 50px; border: 1px solid #ddd;" src="${product.img == "" ? "./assets/images/default.jpg" : img_path + product.img}" id="product_img"></td>
-            <td>${product.name}</td>
-            <td>${settings.symbol}${product.price}</td>
-            <td>${product.stock == 1 ? product.quantity : 'N/A'}</td>
-            <td>${category.length > 0 ? category[0].name : ''}</td>
-            <td class="nobr"><span class="btn-group"><button onClick="$(this).editProduct(${index})" class="btn btn-warning btn-sm"><i class="fa fa-edit"></i></button><button onClick="$(this).deleteProduct(${product._id})" class="btn btn-danger btn-sm"><i class="fa fa-trash"></i></button></span></td></tr>`;
-
-                if (counter == allProducts.length) {
-
-                    $('#product_list').html(product_list);
-
-                    products.forEach(pro => {
-                        $("#" + pro._id + "").JsBarcode(pro._id, {
-                            width: 2,
-                            height: 25,
-                            fontSize: 14
-                        });
-                    });
-
-                    $('#productList').DataTable({
-                        "order": [[1, "desc"]]
-                        , "autoWidth": false
-                        , "info": true
-                        , "JQueryUI": true
-                        , "ordering": true
-                        , "paging": false
-                    });
+                // Build image URL
+                let imgUrl = "./assets/images/default.jpg";
+                if (product.img) {
+                    imgUrl = `${api}images/${product.img}`;
                 }
 
+                let category = allCategories.filter(cat => cat.id == product.category);
+
+                product_list += `
+                    <tr>
+                        <td><svg id="barcode_${product.id}"></svg></td>
+                        <td>
+                            <img style="max-height:50px; max-width:50px; border:1px solid #ddd;" 
+                                src="${imgUrl}" 
+                                id="product_img_${product.id}">
+                        </td>
+                        <td>${product.name}</td>
+                        <td>${settings.symbol}${parseFloat(product.price).toFixed(2)}</td>
+                        <td>${product.stock == 1 ? product.quantity : 'N/A'}</td>
+                        <td>${category.length > 0 ? category[0].name : ''}</td>
+                        <td class="nobr">
+                            <span class="btn-group">
+                                <button onClick="$(this).editProduct(${index})" class="btn btn-warning btn-sm">
+                                    <i class="fa fa-edit"></i>
+                                </button>
+                                <button onClick="$(this).deleteProduct(${product.id})" class="btn btn-danger btn-sm">
+                                    <i class="fa fa-trash"></i>
+                                </button>
+                            </span>
+                        </td>
+                    </tr>`;
+            }
+
+            // Render table rows
+            $('#product_list').html(product_list);
+
+            // Generate barcodes
+            products.forEach(pro => {
+                JsBarcode(`#barcode_${pro.id}`, pro.id, {
+                    width: 2,
+                    height: 25,
+                    fontSize: 14
+                });
+            });
+
+            // Initialize DataTable
+            $('#productList').DataTable({
+                order: [[1, "desc"]],
+                autoWidth: false,
+                info: true,
+                jQueryUI: true,
+                ordering: true,
+                paging: false
             });
         }
+
+
 
 
         function loadCategoryList() {
@@ -1555,7 +1632,7 @@ if (auth == undefined) {
                 category_list += `<tr>
      
             <td>${category.name}</td>
-            <td><span class="btn-group"><button onClick="$(this).editCategory(${index})" class="btn btn-warning"><i class="fa fa-edit"></i></button><button onClick="$(this).deleteCategory(${category._id})" class="btn btn-danger"><i class="fa fa-trash"></i></button></span></td></tr>`;
+            <td><span class="btn-group"><button onClick="$(this).editCategory(${index})" class="btn btn-warning"><i class="fa fa-edit"></i></button><button onClick="$(this).deleteCategory(${category.id})" class="btn btn-danger"><i class="fa fa-trash"></i></button></span></td></tr>`;
             });
 
             if (counter == allCategories.length) {
@@ -1604,10 +1681,10 @@ if (auth == undefined) {
             }).then((result) => {
 
                 if (result.value) {
-                    $.get(api + 'users/logout/' + user._id, function (data) {
+                    $.get(api + 'users/logout/' + user.id, function (data) {
                         storage.delete('auth');
                         storage.delete('user');
-                        ipcRenderer.send('app-reload', '');
+                        window.api.reload();
                     });
                 }
             });
@@ -1622,9 +1699,12 @@ if (auth == undefined) {
 
             api = 'http://' + host + ':' + port + '/api/';
 
-            macaddress.one(function (err, mac) {
-                mac_address = mac;
-            });
+            window.api.getMacAddress().then(mac => {
+                mac_address = mac;      // first usage
+            }).catch(err => {
+                console.error("Failed to get MAC address:", err);
+});
+
 
             formData['app'] = $('#app').find('option:selected').text();
             formData['mac'] = mac_address;
@@ -1650,7 +1730,7 @@ if (auth == undefined) {
                     contentType: 'application/json',
                     success: function (response) {
 
-                        ipcRenderer.send('app-reload', '');
+                        window.api.reload();
 
                     }, error: function (data) {
                         console.log(data);
@@ -1679,7 +1759,7 @@ if (auth == undefined) {
                 if (isNumeric(formData.till)) {
                     formData['app'] = $('#app').find('option:selected').text();
                     storage.set('settings', formData);
-                    ipcRenderer.send('app-reload', '');
+                    window.api.reload();
                 }
                 else {
                     Swal.fire(
@@ -1737,7 +1817,7 @@ if (auth == undefined) {
                     success: function (data) {
 
                         if (ownUserEdit) {
-                            ipcRenderer.send('app-reload', '');
+                            window.api.reload();
                         }
 
                         else {
@@ -1770,9 +1850,12 @@ if (auth == undefined) {
             if ($(this).find('option:selected').text() == 'Network Point of Sale Terminal') {
                 $('#net_settings_form').show(500);
                 $('#settings_form').hide(500);
-                macaddress.one(function (err, mac) {
-                    $("#mac").val(mac);
+                window.api.getMacAddress().then(mac => {
+                    $("#mac").val(mac);     // second & third usage
+                }).catch(err => {
+                    console.error("Failed to get MAC address:", err);
                 });
+
             }
             else {
                 $('#net_settings_form').hide(500);
@@ -1789,7 +1872,7 @@ if (auth == undefined) {
 
             $('#userModal').modal('show');
 
-            $("#user_id").val(user._id);
+            $("#user_id").val(user.id);
             $("#fullname").val(user.fullname);
             $("#username").val(user.username);
             $("#password").val(atob(user.password));
@@ -1820,9 +1903,12 @@ if (auth == undefined) {
                 $("#ip").val(platform.ip);
                 $("#till").val(platform.till);
 
-                macaddress.one(function (err, mac) {
-                    $("#mac").val(mac);
+                window.api.getMacAddress().then(mac => {
+                    $("#mac").val(mac);     // second & third usage
+                }).catch(err => {
+                    console.error("Failed to get MAC address:", err);
                 });
+
 
                 $("#app option").filter(function () {
                     return $(this).text() == platform.app;
@@ -1847,7 +1933,7 @@ if (auth == undefined) {
                 }
                 if (settings.img != "") {
                     $('#logoname').hide();
-                    $('#current_logo').html(`<img src="${img_path + settings.img}" alt="">`);
+                    $('#current_logo').html(`<img src="${settings.img}" alt="">`);
                     $('#rmv_logo').show();
                 }
 
@@ -1924,130 +2010,90 @@ $.fn.print = function () {
 }
 
 
-function loadTransactions() {
+    function loadTransactions() {
+        let tills = [];
+        let users = [];
+        let sales = 0;
+        let transact = 0;
 
-    let tills = [];
-    let users = [];
-    let sales = 0;
-    let transact = 0;
-    let unique = 0;
+        sold_items = [];
+        sold = [];
 
-    sold_items = [];
-    sold = [];
+        let transaction_list = '';
+        let query = `by-date?start=${start_date}&end=${end_date}&user=${by_user}&status=${by_status}&till=${by_till}`;
 
-    let counter = 0;
-    let transaction_list = '';
-    let query = `by-date?start=${start_date}&end=${end_date}&user=${by_user}&status=${by_status}&till=${by_till}`;
-
-
-    $.get(api + query, function (transactions) {
-
-        if (transactions.length > 0) {
-
+        $.get(api + query, function (transactions) {
+            if (!transactions || transactions.length === 0) {
+                Swal.fire('No data!', 'No transactions available within the selected criteria', 'warning');
+                $('#transaction_list').empty();
+                $('#transactionList').DataTable().clear().destroy();
+                return;
+            }
 
             $('#transaction_list').empty();
             $('#transactionList').DataTable().destroy();
-
             allTransactions = [...transactions];
 
-            transactions.forEach((trans, index) => {
+            transactions.forEach((transArray, index) => {
+                // transArray is directly an array of items
+                sold_items.push(...transArray);
 
-                sales += parseFloat(trans.total);
+                // Calculate total for this transaction
+                let totalForTrans = 0;
+                transArray.forEach(item => {
+                    totalForTrans += parseFloat(item.price) * parseInt(item.quantity);
+                });
+                sales += totalForTrans;
                 transact++;
 
-
-
-                trans.items.forEach(item => {
-                    sold_items.push(item);
-                });
-
-
-                if (!tills.includes(trans.till)) {
-                    tills.push(trans.till);
-                }
-
-                if (!users.includes(trans.user_id)) {
-                    users.push(trans.user_id);
-                }
-
-                counter++;
                 transaction_list += `<tr>
-                                <td>${trans.order}</td>
-                                <td class="nobr">${moment(trans.date).format('YYYY MMM DD hh:mm:ss')}</td>
-                                <td>${settings.symbol + trans.total}</td>
-                                <td>${trans.paid == "" ? "" : settings.symbol + trans.paid}</td>
-                                <td>${trans.change ? settings.symbol + Math.abs(trans.change).toFixed(2) : ''}</td>
-                                <td>${trans.paid == "" ? "" : trans.payment_type == 0 ? "Cash" : 'Card'}</td>
-                                <td>${trans.till}</td>
-                                <td>${trans.user}</td>
-                                <td>${trans.paid == "" ? '<button class="btn btn-dark"><i class="fa fa-search-plus"></i></button>' : '<button onClick="$(this).viewTransaction(' + index + ')" class="btn btn-info"><i class="fa fa-search-plus"></i></button></td>'}</tr>
-                    `;
-
-                if (counter == transactions.length) {
-
-                    $('#total_sales #counter').text(settings.symbol + parseFloat(sales).toFixed(2));
-                    $('#total_transactions #counter').text(transact);
-
-                    const result = {};
-
-                    for (const { product_name, price, quantity, id } of sold_items) {
-                        if (!result[product_name]) result[product_name] = [];
-                        result[product_name].push({ id, price, quantity });
-                    }
-
-                    for (item in result) {
-
-                        let price = 0;
-                        let quantity = 0;
-                        let id = 0;
-
-                        result[item].forEach(i => {
-                            id = i.id;
-                            price = i.price;
-                            quantity += i.quantity;
-                        });
-
-                        sold.push({
-                            id: id,
-                            product: item,
-                            qty: quantity,
-                            price: price
-                        });
-                    }
-
-                    loadSoldProducts();
-
-
-                    if (by_user == 0 && by_till == 0) {
-
-                        userFilter(users);
-                        tillFilter(tills);
-                    }
-
-
-                    $('#transaction_list').html(transaction_list);
-                    $('#transactionList').DataTable({
-                        "order": [[1, "desc"]]
-                        , "autoWidth": false
-                        , "info": true
-                        , "JQueryUI": true
-                        , "ordering": true
-                        , "paging": true,
-                        "dom": 'Bfrtip',
-                        "buttons": ['csv', 'excel', 'pdf',]
-
-                    });
-                }
+                    <td>${index + 1}</td>
+                    <td class="nobr">${moment().format('YYYY MMM DD hh:mm:ss')}</td>
+                    <td>${settings.symbol}${totalForTrans.toFixed(2)}</td>
+                    <td></td>
+                    <td></td>
+                    <td>Cash/Card</td>
+                    <td></td>
+                    <td></td>
+                    <td><button class="btn btn-dark"><i class="fa fa-search-plus"></i></button></td>
+                </tr>`;
             });
-        }
-        else {
-            Swal.fire(
-                'No data!',
-                'No transactions available within the selected criteria',
-                'warning'
-            );
-        }
 
+            // Aggregate sold items
+            const result = {};
+            sold_items.forEach(({ product_name, price, quantity, id }) => {
+                if (!result[product_name]) result[product_name] = [];
+                result[product_name].push({ id, price, quantity });
+            });
+
+            for (const item in result) {
+                let totalQty = 0;
+                let price = 0;
+                let id = 0;
+                result[item].forEach(i => {
+                    id = i.id;
+                    price = i.price;
+                    totalQty += i.quantity;
+                });
+                sold.push({ id, product: item, qty: totalQty, price });
+            }
+
+            loadSoldProducts();
+
+            $('#transaction_list').html(transaction_list);
+            $('#transactionList').DataTable({
+                order: [[1, 'desc']],
+                autoWidth: false,
+                info: true,
+                JQueryUI: true,
+                ordering: true,
+                paging: true,
+                dom: 'Bfrtip',
+                buttons: ['csv', 'excel', 'pdf']
+            });
+
+            $('#total_sales #counter').text(settings.symbol + parseFloat(sales).toFixed(2));
+            $('#total_transactions #counter').text(transact);
     });
 }
 
@@ -2079,7 +2125,7 @@ function loadSoldProducts() {
         products++;
 
         let product = allProducts.filter(function (selected) {
-            return selected._id == item.id;
+            return selected.id == item.id;
         });
 
         counter++;
@@ -2107,7 +2153,7 @@ function userFilter(users) {
 
     users.forEach(user => {
         let u = allUsers.filter(function (usr) {
-            return usr._id == user;
+            return usr.id == user;
         });
 
         $('#users').append(`<option value="${user}">${u[0].fullname}</option>`);
@@ -2188,7 +2234,7 @@ $.fn.viewTransaction = function (index) {
 
     receipt = `<div style="font-size: 10px;">                            
         <p style="text-align: center;">
-        ${settings.img == "" ? settings.img : '<img style="max-width: 50px;max-width: 100px;" src ="' + img_path + settings.img + '" /><br>'}
+        ${settings.img == "" ? settings.img : '<img style="max-width: 50px;max-width: 100px;" src ="' + settings.img + '" /><br>'}
             <span style="font-size: 22px;">${settings.store}</span> <br>
             ${settings.address_one} <br>
             ${settings.address_two} <br>
@@ -2320,10 +2366,10 @@ $('body').on("submit", "#account", function (e) {
             cache: false,
             processData: false,
             success: function (data) {
-                if (data._id) {
+                if (data.id) {
                     storage.set('auth', { auth: true });
                     storage.set('user', data);
-                    ipcRenderer.send('app-reload', '');
+                    window.api.reload();
                 }
                 else {
                     Swal.fire(
@@ -2353,7 +2399,7 @@ $('#quit').click(function () {
     }).then((result) => {
 
         if (result.value) {
-            ipcRenderer.send('app-quit', '');
+            window.api.quit();
         }
     });
 });

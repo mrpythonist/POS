@@ -1,39 +1,62 @@
-let express = require("express"),
-  http = require("http"),
-  app = require("express")(),
-  server = http.createServer(app),
-  bodyParser = require("body-parser");
+import express from "express";
+import http from "http";
+import { fileURLToPath } from "url";
+import bodyParser from "body-parser";
+
+import customerRoutes from "./api/customers.js";
+import categoryRoutes from "./api/categories.js";
+import settingsRoutes from "./api/settings.js";
+import userRoutes from "./api/users.js";
+import transactionRoutes from "./api/transactions.js";
+
+import inventoryRoutesFactory from "./api/inventory.js";
+import { app as electronApp } from "electron";
+import path from "path";
+
+const uploadDir = path.join(electronApp.getPath("userData"), "uploads", "product_image");
+
+
+const app = express();
+const server = http.createServer(app);
 
 const PORT = process.env.PORT || 8001;
 
 console.log("Server started");
+
+// ESM dirname fix
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
+app.use("/api/images", express.static(uploadDir));
+app.use("/api/assets", express.static(path.join(__dirname, "assets")));
 
-app.all("/*", function(req, res, next) {
- 
-  res.header("Access-Control-Allow-Origin", "*");  
+// ✅ Works in Express v5+
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET,PUT,POST,DELETE,OPTIONS");
   res.header(
     "Access-Control-Allow-Headers",
     "Content-type,Accept,X-Access-Token,X-Key"
   );
-  if (req.method == "OPTIONS") {
-    res.status(200).end();
-  } else {
-    next();
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
   }
+  next();
 });
 
-app.get("/", function(req, res) {
+app.get("/", (req, res) => {
   res.send("POS Server Online.");
 });
 
-app.use("/api/inventory", require("./api/inventory"));
-app.use("/api/customers", require("./api/customers"));
-app.use("/api/categories", require("./api/categories"));
-app.use("/api/settings", require("./api/settings"));
-app.use("/api/users", require("./api/users"));
-app.use("/api", require("./api/transactions"));
+// API routes
+app.use("/api/inventory", inventoryRoutesFactory(uploadDir));
+app.use("/api/customers", customerRoutes);
+app.use("/api/categories", categoryRoutes);
+app.use("/api/settings", settingsRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api", transactionRoutes);
+
 
 server.listen(PORT, () => console.log(`Listening on PORT ${PORT}`));

@@ -1,71 +1,78 @@
-const app = require( "express" )();
-const server = require( "http" ).Server( app );
-const bodyParser = require( "body-parser" );
-const Datastore = require( "nedb" );
-const async = require( "async" );
+import express from "express";
+import bodyParser from "body-parser";
+import db from "../db/db.js";
 
+const app = express();
 
-app.use( bodyParser.json() );
+app.use(bodyParser.json());
 
-module.exports = app;
+// Create table if it doesn't exist
+db.prepare(`
+  CREATE TABLE IF NOT EXISTS categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL
+  )
+`).run();
 
- 
-let categoryDB = new Datastore( {
-    filename: process.env.APPDATA+"/POS/server/databases/categories.db",
-    autoload: true
-} );
-
-
-categoryDB.ensureIndex({ fieldName: '_id', unique: true });
-app.get( "/", function ( req, res ) {
-    res.send( "Category API" );
-} );
-
-
-  
-app.get( "/all", function ( req, res ) {
-    categoryDB.find( {}, function ( err, docs ) {
-        res.send( docs );
-    } );
-} );
-
- 
-app.post( "/category", function ( req, res ) {
-    let newCategory = req.body;
-    newCategory._id = Math.floor(Date.now() / 1000); 
-    categoryDB.insert( newCategory, function ( err, category) {
-        if ( err ) res.status( 500 ).send( err );
-        else res.sendStatus( 200 );
-    } );
-} );
-
-
-
-app.delete( "/category/:categoryId", function ( req, res ) {
-    categoryDB.remove( {
-        _id: parseInt(req.params.categoryId)
-    }, function ( err, numRemoved ) {
-        if ( err ) res.status( 500 ).send( err );
-        else res.sendStatus( 200 );
-    } );
-} );
-
- 
-
- 
-app.put( "/category", function ( req, res ) {
-    categoryDB.update( {
-        _id: parseInt(req.body.id)
-    }, req.body, {}, function (
-        err,
-        numReplaced,
-        category
-    ) {
-        if ( err ) res.status( 500 ).send( err );
-        else res.sendStatus( 200 );
-    } );
+// Test route
+app.get("/", (req, res) => {
+  res.send("Category API (SQLite - better-sqlite3)");
 });
 
+// GET /all → fetch all categories
+app.get("/all", (req, res) => {
+  try {
+    const rows = db.prepare("SELECT * FROM categories ORDER BY id DESC").all();
+    res.json(rows);
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
 
+// POST /category → insert new category
+app.post("/category", (req, res) => {
+  const { name } = req.body;
+  if (!name) return res.status(400).send("Category name required");
 
- 
+  try {
+    const stmt = db.prepare("INSERT INTO categories (name) VALUES (?)");
+    const result = stmt.run(name);
+    console.log("Inserted row info:", result);
+    res.json({ id: result.lastInsertRowid, name });
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
+
+// DELETE /category/:categoryId → remove category
+app.delete("/category/:categoryId", (req, res) => {
+  const { categoryId } = req.params;
+
+  try {
+    const stmt = db.prepare("DELETE FROM categories WHERE id = ?");
+    const result = stmt.run(categoryId);
+
+    if (result.changes === 0) return res.status(404).send("Category not found");
+    res.sendStatus(200);
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
+
+// PUT /category → update category
+app.put("/category", (req, res) => {
+  const { id, name } = req.body;
+  if (!id || !name) return res.status(400).send("ID and name required");
+
+  try {
+    const stmt = db.prepare("UPDATE categories SET name = ? WHERE id = ?");
+    const result = stmt.run(name, id);
+
+    if (result.changes === 0) return res.status(404).send("Category not found");
+    res.sendStatus(200);
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
+
+export default app;

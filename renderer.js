@@ -1,3 +1,2 @@
-require('./assets/js/pos.js');
-require('./assets/js/product-filter.js');
-require('print-js');
+import "./assets/js/pos.js";
+import "./assets/js/product-filter.js";
