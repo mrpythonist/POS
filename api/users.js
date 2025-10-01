@@ -7,21 +7,7 @@ import db from "../db/db.js"; // ✅ Import shared DB connection
 const app = express();
 app.use(bodyParser.json());
 
-// Ensure users table exists
-db.prepare(`
-  CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE,
-    password TEXT,
-    fullname TEXT,
-    perm_products INTEGER,
-    perm_categories INTEGER,
-    perm_transactions INTEGER,
-    perm_users INTEGER,
-    perm_settings INTEGER,
-    status TEXT
-  )
-`).run();
+
 
 // Routes
 app.get("/", (req, res) => {

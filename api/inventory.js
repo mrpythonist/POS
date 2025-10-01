@@ -22,19 +22,7 @@ export default function createInventoryRoutes(uploadDir) {
   });
   const upload = multer({ storage });
 
-  // Create inventory table if not exists
-  db.prepare(`
-    CREATE TABLE IF NOT EXISTS inventory (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT,
-      price REAL,
-      category TEXT,
-      quantity INTEGER DEFAULT 0,
-      stock INTEGER DEFAULT 1,
-      img TEXT
-    )
-  `).run();
-
+ 
   // Routes
 
   app.get("/", (req, res) => {

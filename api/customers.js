@@ -6,16 +6,6 @@ import db from "../db/db.js"; // <-- better-sqlite3 connection
 const app = express();
 app.use(bodyParser.json());
 
-// Create customers table if not exists
-db.prepare(`
-  CREATE TABLE IF NOT EXISTS customers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    email TEXT,
-    phone TEXT,
-    address TEXT
-  )
-`).run();
 
 // Test route
 app.get("/", (req, res) => {

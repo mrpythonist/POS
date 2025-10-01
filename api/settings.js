@@ -6,23 +6,6 @@ import db from "../db/db.js"; // <-- better-sqlite3 connection
 const app = express();
 app.use(bodyParser.json());
 
-// Create settings table if not exists
-db.prepare(`
-  CREATE TABLE IF NOT EXISTS settings (
-    id INTEGER PRIMARY KEY,
-    app TEXT,
-    store TEXT,
-    address_one TEXT,
-    address_two TEXT,
-    contact TEXT,
-    tax REAL,
-    symbol TEXT,
-    percentage REAL,
-    charge_tax INTEGER,
-    footer TEXT,
-    img TEXT
-  )
-`).run();
 
 // Routes
 app.get("/", (req, res) => {

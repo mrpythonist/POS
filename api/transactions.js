@@ -8,21 +8,7 @@ import Inventory from "./inventory.js";
 const app = express();
 app.use(bodyParser.json());
 
-// Ensure transactions table exists
-db.prepare(`
-  CREATE TABLE IF NOT EXISTS transactions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ref_number TEXT,
-    status INTEGER,
-    customer TEXT,
-    date TEXT,
-    user_id INTEGER,
-    till INTEGER,
-    total REAL,
-    paid REAL,
-    items TEXT
-  )
-`).run();
+
 
 // Routes
 app.get("/", (req, res) => {
