@@ -20,12 +20,18 @@ let item;
 let auth;
 let holdOrder = 0;
 let vat = 0;
+let gst = 0;
+let serviceCharges = 0;
+let discount = 0;
+let account_type = '';
+let account_no = '';
 // let perms = null;
 let deleteId = 0;
 let paymentType = 0;
 let receipt = '';
 let totalVat = 0;
 let subTotal = 0;
+let total = 0;
 let method = '';
 // let order_index = 0;
 let user_index = 0;
@@ -144,8 +150,8 @@ function updateSettingsUI() {
         $("#price_curr, #payment_curr, #change_curr").text(settings.symbol);
     }
 
-    const vat = parseFloat(settings.percentage);
-    $("#taxInfo").text(settings.charge_tax ? vat : 0);
+    // const vat = parseFloat(settings.percentage);
+    // $("#taxInfo").text(settings.charge_tax ? vat : 0);
 }
 
 // Show modal if settings missing
@@ -192,6 +198,7 @@ if (!auth) {
         loadCategories();
         loadProducts();
         loadCustomers();
+        loadOrderType();
     
 
     // --- Handle settings form submission ---
@@ -312,6 +319,20 @@ if (!auth) {
 
                 //  $('#customer').chosen();
 
+            });
+
+        }
+
+        function loadOrderType() {
+
+            let order_types = ['Dine-In', 'Take-Away', 'Delivery'];
+
+            $('#order_type').html(`<option value="" selected="selected">Order Type</option>`);
+
+            order_types.forEach(ord => {
+
+                let order_t = `<option value='${ord}'>${ord}</option>`;
+                $('#order_type').append(order_t);
             });
 
         }
@@ -470,35 +491,58 @@ if (!auth) {
 
 
         $.fn.calculateCart = function () {
-            let total = 0;
-            let grossTotal;
+            let subtotal = 0;
+            let grossTotal = 0;
+
+            // count total items in cart
             $('#total').text(cart.length);
+
+            // calculate subtotal (price * quantity)
             $.each(cart, function (index, data) {
-                total += data.quantity * data.price;
+                subtotal += data.quantity * data.price;
             });
-            total = total - $("#inputDiscount").val();
-            $('#price').text(settings.symbol + total.toFixed(2));
 
-            subTotal = total;
+            // get discount percentage
+            let discountPercent = parseFloat($("#inputDiscount").val()) || 0;
 
-            if ($("#inputDiscount").val() >= total) {
+            // calculate discount amount (percentage of subtotal)
+            let discountAmount = (subtotal * discountPercent) / 100;
+
+            // apply discount
+            let total = subtotal - discountAmount;
+
+            // safety: discount cannot exceed subtotal
+            if (discountPercent >= 100) {
+                discountAmount = subtotal;
+                total = 0;
                 $("#inputDiscount").val(0);
             }
 
-            if (settings.charge_tax) {
-                totalVat = ((total * vat) / 100);
-                grossTotal = total + totalVat
-            }
+            // update price (after discount)
+            $('#price').text(settings.symbol + total.toFixed(2));
 
-            else {
-                grossTotal = total;
-            }
+            // assign subtotal (before discount)
+            subTotal = subtotal;
 
+            // calculate VAT if enabled (you had commented logic)
+            // if (settings.charge_tax) {
+            //     totalVat = ((total * vat) / 100);
+            //     grossTotal = total + totalVat;
+            // } else {
+            //     grossTotal = total;
+            // }
+
+            // without tax
+            grossTotal = total;
+
+            // final total
             orderTotal = grossTotal.toFixed(2);
 
+            // update UI
             $("#gross_price").text(settings.symbol + grossTotal.toFixed(2));
             $("#payablePrice").val(grossTotal);
         };
+
 
 
 
@@ -685,6 +729,7 @@ if (!auth) {
 
             let discount = $("#inputDiscount").val();
             let customer = JSON.parse($("#customer").val());
+            let order_type = $("#order_type").val();
             let date = moment(currentTime).format("YYYY-MM-DD HH:mm:ss");
             let paid = $("#payment").val() == "" ? "" : parseFloat($("#payment").val()).toFixed(2);
             let change = $("#change").text() == "" ? "" : parseFloat($("#change").text()).toFixed(2);
@@ -727,13 +772,13 @@ if (!auth) {
 
 
 
-            if (settings.charge_tax) {
-                tax_row = `<tr>
-                    <td>Vat(${settings.percentage})% </td>
-                    <td>:</td>
-                    <td>${settings.symbol}${parseFloat(totalVat).toFixed(2)}</td>
-                </tr>`;
-            }
+            // if (settings.charge_tax) {
+            //     tax_row = `<tr>
+            //         <td>Vat(${settings.percentage})% </td>
+            //         <td>:</td>
+            //         <td>${settings.symbol}${parseFloat(totalVat).toFixed(2)}</td>
+            //     </tr>`;
+            // }
 
 
 
@@ -771,7 +816,6 @@ if (!auth) {
             ${settings.address_one} <br>
             ${settings.address_two} <br>
             ${settings.contact != '' ? 'Tel: ' + settings.contact + '<br>' : ''} 
-            ${settings.tax != '' ? 'Vat No: ' + settings.tax + '<br>' : ''} 
         </p>
         <hr>
             <p  style="text-align:left;">
@@ -847,12 +891,13 @@ if (!auth) {
                 customer: customer,
                 status: status,
                 subtotal: parseFloat(subTotal).toFixed(2),
-                tax: totalVat,
-                order_type: 1,
+                order_type: order_type,
                 items: cart,
                 date: currentTime,
-                payment_type: type,
-                payment_info: $("#paymentInfo").val(),
+                payment_method: type,
+                // payment_info: $("#paymentInfo").val(),
+                account_type: account_type,
+                account_no: account_no,
                 total: orderTotal,
                 paid: paid,
                 change: change,
@@ -860,7 +905,6 @@ if (!auth) {
                 till: platform.till,
                 mac: platform.mac,
                 user: user.fullname,
-                user_id: user.id
             }
 
 
@@ -879,6 +923,7 @@ if (!auth) {
                     $('#orderModal').modal('show');
                     loadProducts();
                     loadCustomers();
+                    loadOrderType();
                     $(".loading").hide();
                     $("#dueModal").modal('hide');
                     $("#paymentModel").modal('hide');
@@ -959,16 +1004,34 @@ if (!auth) {
 
 
         $.fn.calculatePrice = function (data) {
-            totalPrice = 0;
+            let subtotal = 0;
+
+            // calculate subtotal
             $.each(data.products, function (index, product) {
-                totalPrice += product.price * product.quantity;
-            })
+                subtotal += product.price * product.quantity;
+            });
 
-            let vat = (totalPrice * data.vat) / 100;
-            totalPrice = ((totalPrice + vat) - data.discount).toFixed(0);
+            // tax & charges
+            // let vat = (subtotal * (data.vat || 0)) / 100;
+            let gst = (subtotal * (data.gst || 0)) / 100;
+            let sc  = (subtotal * (data.sc  || 0)) / 100;
 
+            // discount as percentage
+            let discount = (subtotal * (data.discount || 0)) / 100;
+
+            // final total
+            let totalPrice = (subtotal + gst + sc - discount).toFixed(0);
+
+            let dt =  {
+                subtotal: subtotal.toFixed(0),
+                gst: gst.toFixed(0),
+                serviceCharges: sc.toFixed(0),
+                discount: discount.toFixed(0),
+                total: totalPrice
+            };
             return totalPrice;
         };
+
 
 
         $.fn.orderDetails = function (index, orderType) {
@@ -1579,6 +1642,7 @@ if (!auth) {
                         </td>
                         <td>${product.name}</td>
                         <td>${settings.symbol}${parseFloat(product.price).toFixed(2)}</td>
+                        <td>${product?.sku}</td>
                         <td>${product.stock == 1 ? product.quantity : 'N/A'}</td>
                         <td>${category.length > 0 ? category[0].name : ''}</td>
                         <td class="nobr">
@@ -1935,9 +1999,9 @@ if (!auth) {
                 $("#percentage").val(settings.percentage);
                 $("#footer").val(settings.footer);
                 $("#logo_img").val(settings.img);
-                if (settings.charge_tax == 'on') {
-                    $('#charge_tax').prop("checked", true);
-                }
+                // if (settings.charge_tax == 'on') {
+                //     $('#charge_tax').prop("checked", true);
+                // }
                 if (settings.img != "") {
                     $('#logoname').hide();
                     $('#current_logo').html(`<img src="${settings.img}" alt="">`);
@@ -2019,8 +2083,6 @@ $.fn.print = function () {
 
     function loadTransactions() {
 
-        let tills = [];
-        let users = [];
         let sales = 0;
         let transact = 0;
 
@@ -2057,24 +2119,24 @@ $.fn.print = function () {
                     // Add parsed items to sold_items
                     sold_items.push(...items);
 
-                    if (!tills.includes(trans.till)) {
-                        tills.push(trans.till);
-                    }
+                    // if (!tills.includes(trans.till)) {
+                    //     tills.push(trans.till);
+                    // }
 
-                    if (!users.includes(trans.user_id)) {
-                        users.push(trans.user_id);
-                    }
+                    // if (!users.includes(trans.user_id)) {
+                    //     users.push(trans.user_id);
+                    // }
 
                     counter++;
                     transaction_list += `<tr>
-                        <td>${trans.order || (index+1)}</td>
-                        <td class="nobr">${moment(trans.date).format('YYYY MMM DD hh:mm:ss')}</td>
-                        <td>${settings.symbol + trans.total}</td>
-                        <td>${trans.paid == "" ? "" : settings.symbol + trans.paid}</td>
-                        <td>${trans.paid == "" ? "" : settings.symbol + (parseInt(trans.paid) - parseInt(trans.total))}</td>
-                        <td>${trans.paid == "" ? "" : trans.payment_type == 0 ? "Cash" : 'Card'}</td>
-                        <td>${trans.till}</td>
-                        <td>${trans.user_id || ''}</td>
+                        <td>${trans?.ref_number || (index+1)}</td>
+                        <td class="nobr">${moment(trans?.date).format('YYYY MMM DD hh:mm:ss')}</td>
+                        <td>${trans?.customer}</td>
+                        <td>${trans?.order_type}</td>
+                        <td>${trans?.payment_method}</td>
+                        <td>${trans?.discount}</td>
+                        <td>${trans?.subtotal}</td>
+                        <td>${trans?.total}</td>
                         <td>${trans.paid == "" 
                             ? '<button class="btn btn-dark"><i class="fa fa-search-plus"></i></button>' 
                             : '<button onClick="$(this).viewTransaction(' + index + ')" class="btn btn-info"><i class="fa fa-search-plus"></i></button>'
@@ -2115,10 +2177,10 @@ $.fn.print = function () {
 
                         loadSoldProducts(sold);
 
-                        if (by_user == 0 && by_till == 0) {
-                            userFilter(users);
-                            tillFilter(tills);
-                        }
+                        // if (by_user == 0 && by_till == 0) {
+                        //     userFilter(users);
+                        //     tillFilter(tills);
+                        // }
 
                         $('#transaction_list').html(transaction_list);
                         $('#transactionList').DataTable({
@@ -2225,7 +2287,9 @@ $.fn.viewTransaction = function (index) {
     let refNumber = allTransactions[index].ref_number != "" ? allTransactions[index].ref_number : allTransactions[index].id;
     let orderNumber = allTransactions[index].id;
     let type = "";
-    let tax_row = "";
+    let order_typ = "";
+    let subtotal = "";
+    let total = "";
     let items = "";
     let products = JSON.parse(allTransactions[index].items);
 
@@ -2237,7 +2301,7 @@ $.fn.viewTransaction = function (index) {
 
     switch (allTransactions[index].payment_type) {
 
-        case 2: type = "Card";
+        case 2: type = "Online";
             break;
 
         default: type = "Cash";
@@ -2265,13 +2329,13 @@ $.fn.viewTransaction = function (index) {
 
 
 
-    if (settings.charge_tax) {
-        tax_row = `<tr>
-                <td>Vat(${settings.percentage})% </td>
-                <td>:</td>
-                <td>${settings.symbol}${parseFloat(allTransactions[index].tax).toFixed(2)}</td>
-            </tr>`;
-    }
+    // if (settings.charge_tax) {
+    //     tax_row = `<tr>
+    //             <td>Vat(${settings.percentage})% </td>
+    //             <td>:</td>
+    //             <td>${settings.symbol}${parseFloat(allTransactions[index].tax).toFixed(2)}</td>
+    //         </tr>`;
+    // }
 
 
 
@@ -2281,14 +2345,13 @@ $.fn.viewTransaction = function (index) {
             ${settings.address_one} <br>
             ${settings.address_two} <br>
             ${settings.contact != '' ? 'Tel: ' + settings.contact + '<br>' : ''} 
-            ${settings.tax != '' ? 'Vat No: ' + settings.tax + '<br>' : ''} 
     </p>
     <hr>
         <p style="text-align:left;">
         Invoice : ${orderNumber} <br>
         Ref No : ${refNumber} <br>
         Customer : ${allTransactions[index].customer == 0 ? 'Walk in Customer' : allTransactions[index].customer.name} <br>
-        Cashier : ${allTransactions[index].user_id} <br>
+        Cashier : ${allTransactions[index].user} <br>
         Date : ${moment(allTransactions[index].date).format('DD MMM YYYY HH:mm:ss')}<br>
         </p>
     <hr>

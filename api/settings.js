@@ -37,30 +37,28 @@ app.post("/post", (req, res) => {
     address_one: req.body.address_one,
     address_two: req.body.address_two,
     contact: req.body.contact,
-    tax: req.body.tax,
     symbol: req.body.symbol,
-    percentage: req.body.percentage,
-    charge_tax: req.body.charge_tax,
+    gst: req.body.gst,
+    sc: req.body.sc,
     footer: req.body.footer,
     img: "assets/images/logo.png" // always fallback
   };
 
   try {
     db.prepare(`
-      INSERT INTO settings (id, app, store, address_one, address_two, contact, tax, symbol, percentage, charge_tax, footer, img)
-      VALUES (@id, @app, @store, @address_one, @address_two, @contact, @tax, @symbol, @percentage, @charge_tax, @footer, @img)
+      INSERT INTO settings (id, app, store, address_one, address_two, contact, symbol, gst, sc, footer, img)
+      VALUES (@id, @app, @store, @address_one, @address_two, @contact, @symbol, @gst, @sc, @footer, @img)
       ON CONFLICT(id) DO UPDATE SET
         app = excluded.app,
         store = excluded.store,
         address_one = excluded.address_one,
         address_two = excluded.address_two,
         contact = excluded.contact,
-        tax = excluded.tax,
         symbol = excluded.symbol,
-        percentage = excluded.percentage,
-        charge_tax = excluded.charge_tax,
+        gst = excluded.gst,
+        sc = excluded.sc,
         footer = excluded.footer,
-        img = excluded.img
+        img = 'assets/images/logo.png'
     `).run(settingsData);
 
     res.sendStatus(200);

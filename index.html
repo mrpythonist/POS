@@ -107,7 +107,7 @@
                 <div class="card-box"> 
                     <div class="row">               
                         <h3 class="col-md-2">Transactions</h3> 
-                        <div class="col-md-1">
+                        <!-- <div class="col-md-1">
                             <span>Till</span>
                             <select id="tills" class="form-control">                              
                             </select>
@@ -123,7 +123,7 @@
                                 <option value="1">Paid</option>
                                 <option value="0">Unpaid</option>
                             </select>
-                        </div>
+                        </div> -->
                         <div class="col-md-3">
                             <span style="width: 100%;">Date</span>
                             <div id="reportrange">
@@ -188,12 +188,12 @@
                                     <tr>                                                                      
                                         <th>Invoice</th>                                      
                                         <th>Date</th>
-                                        <th>Total</th>
-                                        <th>Paid</th>
-                                        <th>Change</th>
+                                        <th>Customer</th>
+                                        <th>Order Type</th>
                                         <th>Method</th>
-                                        <th>Till</th>
-                                        <th>Cashier</th>
+                                        <th>Discount</th>
+                                        <th>Subtotal</th>
+                                        <th>Total</th>
                                         <th>View</th>
                                     </tr>
                                 </thead>
@@ -220,6 +220,12 @@
                           </div>
                           <div class="col-md-2">
                               <button data-toggle="modal" data-target="#newCustomer" class="btn btn-success"><i class="fa fa-plus"></i></button>
+                          </div>
+                      </div>
+                      <div class="row">
+                          <div class="col-md-12">
+                              <select name="order_type" id="order_type" class="form-control">
+                          </select>
                           </div>
                       </div>
                       <div class="input-group m-t-5">
@@ -265,7 +271,7 @@
                      <div class="row">
                          <div class="col-md-3">Discount</div>
                          <div class="col-md-3"><input class="form-control" type="number" id="inputDiscount" oninput="$(this).calculateCart();"></div>
-                         <div class="col-md-3">Gross Price (inc <span id="taxInfo"></span>% Tax)</div>
+                         <div class="col-md-3">Total Price </div>
                          <div class="col-md-3"><h3 id="gross_price">0.00</h3></div>
                      </div>
   
@@ -399,7 +405,7 @@
                               <a href="javascript:void(0)" id="cash" onclick="paymentType = 1" class="list-group-item active">
                                   Cash
                               </a>
-                            <a href="javascript:void(0)" id="card" onclick="paymentType = 3" class="list-group-item">Card</a>
+                            <a href="javascript:void(0)" id="online" onclick="paymentType = 3" class="list-group-item">Online</a>
                           </div>
                       </div>
                       <div class="col-md-8">
@@ -559,6 +565,10 @@
                             <input type="text" required="required" name="price" placeholder="Price" class="form-control" id="product_price">
                         </div>
                         <div class="form-group">
+                            <label for="userName">SKU</label>
+                            <input type="text" required="required"  name="sku" placeholder="Enter short sku" class="form-control" id="product_sku">
+                        </div>
+                        <div class="form-group">
                             <label for="userName">Stock</label>
                             <input type="text" name="quantity" placeholder="Available stock" class="form-control" id="quantity">
                         </div>
@@ -622,7 +632,8 @@
                                     <th>Barcode</th>
                                     <th>Item</th>
                                     <th>Name</th>                                      
-                                    <th>Price</th>
+                                    <th>Price</th>                                      
+                                    <th>SKU</th>
                                     <th>Stock</th>
                                     <th>Category</th>
                                     <th>Action</th>
@@ -834,9 +845,7 @@
                         <div class="form-group">
                         <label for="app">Application</label>
                         <select name="app" id="app" class="form-control">
-                            <option>Standalone Point of Sale</option>
-                            <option>Network Point of Sale Terminal</option>
-                            <option>Network Point of Sale Server</option>                                            
+                            <option>Standalone Point of Sale</option>                                        
                         </select>
                  </div>
 
@@ -894,9 +903,12 @@
                                         <input type="text" name="contact" class="form-control" id="contact">
                                  </div>
                                  <div class="form-group">
-                                        <label for="userName">Vat Number</label>
-                                        <input type="text" name="tax" parsley-trigger="change" class="form-control" id="tax">
-                                 </div>
+                                            <label for="userName">Service Charges Percentage</label>
+                                            <div style="width: 80%; float:left;">
+                                            <input type="text" required="required"  name="sc" class="form-control" id="sc">
+                                            </div>
+                                            <div class="pull-right p-t-10"> % </div>
+                                </div>
                               
 
                             </div>
@@ -907,16 +919,13 @@
                                      </div>
     
                                      <div class="form-group">
-                                            <label for="userName">Vat Percentage</label>
+                                            <label for="userName">GST Percentage</label>
                                             <div style="width: 80%; float:left;">
-                                            <input type="text" required="required"  name="percentage" class="form-control" id="percentage">
+                                            <input type="text" required="required"  name="gst" class="form-control" id="gst">
                                             </div>
                                             <div class="pull-right p-t-10"> % </div>
                                      </div>
                                      <br><br>
-                                     <div class="form-group">
-                                        <label><input type="checkbox" name="charge_tax" id="charge_tax"> Charge Vat</label>
-                                     </div>
                                      <div class="form-group">       
                                         <label for="userName"><span id="rmv_logo" class="btn btn-xs btn-warning">Remove</span> Logo </label>              
                                         <div id="current_logo"></div>                                        

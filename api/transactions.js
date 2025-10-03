@@ -2,7 +2,6 @@
 import express from "express";
 import bodyParser from "body-parser";
 import db from "../db/db.js";
-import path from "path";
 import Inventory from "./inventory.js";
 
 const app = express();
@@ -72,20 +71,27 @@ app.get("/by-date", (req, res) => {
 app.post("/new", (req, res) => {
   try {
     const t = req.body;
-
     db.prepare(`
-      INSERT INTO transactions (id, ref_number, status, customer, date, user_id, till, total, paid, items)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO transactions (id, ref_number, status, customer, date, user, order_type, discount, gst, sc, till, subtotal, total, paid, payment_method, account_type, account_no, items)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       t.id,
       t.ref_number || "",
       t.status || 0,
       t.customer?.id || "0",
       t.date || new Date().toJSON(),
-      t.user_id || 0,
+      t.user || "Anonymous",
+      t.order_type || "N/A",
+      t.discount || 0,
+      t.gst || 0,
+      t.sc || 0,
       t.till || 0,
+      t.subtotal || 0,
       t.total || 0,
       t.paid || 0,
+      t.payment_method || "",
+      t.account_type || "",
+      t.account_no || "",
       JSON.stringify(t.items || [])
     );
 
@@ -104,19 +110,28 @@ app.put("/new", (req, res) => {
   try {
     const t = req.body;
 
+    console.log(t);
     const changes = db.prepare(`
       UPDATE transactions
-      SET ref_number = ?, status = ?, customer = ?, date = ?, user_id = ?, till = ?, total = ?, paid = ?, items = ?
+      SET ref_number = ?, status = ?, customer = ?, date = ?, user = ?, order_type = ?, discount = ?, gst = ?, sc = ?, till = ?, subtotal = ?, total = ?, paid = ?, payment_method = ?, account_type = ?, account_no = ?, items = ?
       WHERE id = ?
     `).run(
       t.ref_number || "",
       t.status || 0,
       t.customer || "0",
       t.date || new Date().toJSON(),
-      t.user_id || 0,
+      t.user || "Anonymous",
+      t.order_type || "N/A",
+      t.discount || 0,
+      t.gst || 0,
+      t.sc || 0,
       t.till || 0,
+      t.subtotal || 0,
       t.total || 0,
       t.paid || 0,
+      t.payment_method || "",
+      t.account_type || "",
+      t.account_no || "",
       JSON.stringify(t.items || []),
       t.id
     ).changes;
@@ -124,6 +139,7 @@ app.put("/new", (req, res) => {
     if (changes === 0) return res.status(404).send("Transaction not found");
     res.sendStatus(200);
   } catch (err) {
+    console.log(err.message);
     res.status(500).send(err.message);
   }
 });

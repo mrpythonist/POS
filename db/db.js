@@ -39,10 +39,9 @@ db.prepare(`
     address_one TEXT,
     address_two TEXT,
     contact TEXT,
-    tax REAL,
     symbol TEXT,
-    percentage REAL,
-    charge_tax INTEGER,
+    gst REAL,
+    sc REAL,
     footer TEXT,
     img TEXT
   )
@@ -92,6 +91,7 @@ db.prepare(`
       category TEXT,
       quantity INTEGER DEFAULT 0,
       stock INTEGER DEFAULT 1,
+      sku TEXT,
       img TEXT
     )
   `).run();
@@ -104,16 +104,23 @@ db.prepare(`
     status INTEGER,
     customer TEXT,
     date TEXT,
-    user_id INTEGER,
+    user TEXT,
+    order_type TEXT,
+    discount INTEGER,
+    gst INTEGER,
+    sc INTEGER,
     till INTEGER,
+    subtotal REAL,
     total REAL,
     paid REAL,
+    payment_method TEXT,
+    account_type TEXT,
+    account_no TEXT,
     items TEXT
   )
 `).run();
 
 
-console.log("✅ Created all tables");
 
 // Insert default settings if empty
 const settingsCount = db.prepare("SELECT COUNT(*) AS cnt FROM settings").get().cnt;
@@ -121,12 +128,12 @@ if (settingsCount === 0) {
   db.prepare(`
     INSERT INTO settings (
       id, app, store, address_one, address_two, contact,
-      tax, symbol, percentage, charge_tax, footer, img
+       symbol, gst, sc, footer, img
     ) VALUES (
       1, 'POS', 'FLAVORS',
-      'Near Malik Solar Energy, Lodhran Road',
-      'Rajaram Zarif Shaheed, Shujabad, Multan', '0310-4004515',
-      0, 'Rs. ', 0, 0, 'Thank you for visiting US!', 'assets/images/logo.png'
+      'Flavors, Lodhran - Shujabad Road, Rajaram.',
+      '', '0310-4004515',
+       'Rs. ', 0, 0, 'Thank you for visiting US!', 'assets/images/logo.png'
     )
   `).run();
 
@@ -138,8 +145,8 @@ const usersCount = db.prepare("SELECT COUNT(*) AS cnt FROM users").get().cnt;
 if (usersCount === 0) {
   const User = {
       id: 1,
-      username: "admin",
-      password: btoa("admin"),
+      username: "flavors",
+      password: btoa("1122"),
       fullname: "Administrator",
       perm_products: 1,
       perm_categories: 1,

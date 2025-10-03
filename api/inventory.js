@@ -62,12 +62,12 @@ export default function createInventoryRoutes(uploadDir) {
         if (!req.file) image = "";
       }
 
-      const { id, price, category, quantity, name, stock } = req.body;
+      const { id, price, category, quantity, name, stock, sku } = req.body;
 
       if (!id) {
         const stmt = db.prepare(`
-          INSERT INTO inventory (name, price, category, quantity, stock, img)
-          VALUES (?, ?, ?, ?, ?, ?)
+          INSERT INTO inventory (name, price, category, quantity, stock, sku, img)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
         `);
         const result = stmt.run(
           name,
@@ -75,13 +75,14 @@ export default function createInventoryRoutes(uploadDir) {
           category,
           quantity || 0,
           stock === "on" ? 0 : 1,
+          sku,
           image
         );
-        res.json({ id: result.lastInsertRowid, name, price, category, quantity, stock, img: image });
+        res.json({ id: result.lastInsertRowid, name, price, category, quantity, stock, sku, img: image });
       } else {
         const stmt = db.prepare(`
           UPDATE inventory
-          SET name=?, price=?, category=?, quantity=?, stock=?, img=?
+          SET name=?, price=?, category=?, quantity=?, stock=?, sku=?, img=?
           WHERE id=?
         `);
         const result = stmt.run(
@@ -90,6 +91,7 @@ export default function createInventoryRoutes(uploadDir) {
           category,
           quantity || 0,
           stock === "on" ? 0 : 1,
+          sku,
           image,
           id
         );
@@ -116,7 +118,7 @@ export default function createInventoryRoutes(uploadDir) {
   app.post("/product/sku", (req, res) => {
     try {
       const { skuCode } = req.body;
-      const row = db.prepare("SELECT * FROM inventory WHERE id = ?").get(skuCode);
+      const row = db.prepare("SELECT * FROM inventory WHERE sku = ?").get(skuCode);
       res.json(row || {});
     } catch (err) {
       res.status(500).send(err.message);
