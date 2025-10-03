@@ -2162,25 +2162,52 @@ body.fixed-left .side-menu.left {
 /* =============
    Print css
 ============= */
+/* Remove unnecessary elements when printing */
 @media print {
   .logo,
   .breadcrumb,
   .page-title,
-  .footer {
-    display: none;
-    margin: 0px;
-    padding: 0px;
-  }
+  .footer,
   .left,
   .right-bar {
-    display: none;
+    display: none !important;
+    margin: 0;
+    padding: 0;
   }
-  .content {
-    margin-top: 0px;
-    padding-top: 0px;
-  }
+
+  .content,
   .content-page {
-    margin-left: 0px;
-    margin-top: 0px;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Receipt formatting */
+  .receipt {
+    font-size: 10px;
+    font-family: "Courier New", monospace; /* keeps alignment */
+    width: 280px; /* typical 80mm printer */
+    margin: 0 auto; /* center for print */
+  }
+
+  .receipt hr {
+    border: none;
+    border-top: 1px dashed #000;
+    margin: 4px 0;
+  }
+
+  .receipt table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .receipt th,
+  .receipt td {
+    font-size: 10px;
+    padding: 2px 0;
+    text-align: left;
+  }
+
+  .receipt td:last-child {
+    text-align: right; /* align prices neatly */
   }
 }

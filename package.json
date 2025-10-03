@@ -9,14 +9,13 @@
   "scripts": {
     "electron": "cross-env NODE_ENV=dev nodemon --exec \"\"electron .\"\"",
     "electron-build": "electron-builder",
-    "package-win": "electron-packager . POS --overwrite --asar=false --platform=win32 --arch=x64 --icon=assets/images/icon.ico --prune=true --out=release-builds --version-string.ProductName=\"POS\""
+    "package-win": "electron-packager . POS --no-win32metadata --overwrite --no-asar --platform=win32 --arch=x64 --prune=true --out=release-builds"
   },
   "dependencies": {
     "async": "^3.2.6",
     "better-sqlite3": "^12.4.1",
     "body-parser": "^2.2.0",
     "btoa": "^1.2.1",
-    "electron": "^38.2.0",
     "electron-context-menu": "^4.1.1",
     "electron-store": "^11.0.0",
     "electron-winstaller": "^5.4.0",
@@ -41,8 +40,10 @@
   },
   "devDependencies": {
     "cross-env": "^10.1.0",
+    "electron": "^38.2.0",
     "electron-builder": "^26.0.12",
     "electron-is-dev": "^3.0.1",
+    "electron-packager": "^17.1.2",
     "electron-rebuild": "^3.2.9",
     "nodemon": "^3.1.10"
   },

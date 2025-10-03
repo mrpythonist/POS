@@ -765,26 +765,22 @@ if (!auth) {
             }
 
 
-            receipt = `<div style="font-size: 10px;">                            
+            receipt = `<div style="font-size: 10px;"  class="receipt">                            
         <p style="text-align: center;">
-        ${settings.img == "" ? settings.img : '<img style="max-width: 50px;max-width: 100px;" src ="' + settings.img + '" /><br>'}
-            <span style="font-size: 22px;">${settings.store}</span> <br>
+         ${settings.img ? '<img style="max-width: 50px;max-width: 100px;" src ="' + settings.img + '" /><br>' : '<span style="font-size: 22px;">${settings.store}</span> <br>'}
             ${settings.address_one} <br>
             ${settings.address_two} <br>
             ${settings.contact != '' ? 'Tel: ' + settings.contact + '<br>' : ''} 
             ${settings.tax != '' ? 'Vat No: ' + settings.tax + '<br>' : ''} 
         </p>
         <hr>
-        <left>
-            <p>
+            <p  style="text-align:left;">
             Order No : ${orderNumber} <br>
             Ref No : ${refNumber == "" ? orderNumber : refNumber} <br>
             Customer : ${customer == 0 ? 'Walk in customer' : customer.name} <br>
             Cashier : ${user.fullname} <br>
             Date : ${date}<br>
             </p>
-
-        </left>
         <hr>
         <table width="100%">
             <thead style="text-align: left;">
@@ -797,15 +793,13 @@ if (!auth) {
             <tbody>
             ${items}                
      
-            <tr>                        
-                <td><b>Subtotal</b></td>
-                <td>:</td>
-                <td><b>${settings.symbol}${subTotal.toFixed(2)}</b></td>
-            </tr>
             <tr>
-                <td>Discount</td>
-                <td>:</td>
-                <td>${discount > 0 ? settings.symbol + parseFloat(discount).toFixed(2) : ''}</td>
+                <td colspan="2"><b>Subtotal</b></td>
+                <td style="text-align:right;"><b>${settings.symbol}${subTotal.toFixed(2)}</b></td>
+                </tr>
+                <tr>
+                <td colspan="2">Discount</td>
+                <td style="text-align:right;">${discount > 0 ? settings.symbol + parseFloat(discount).toFixed(2) : ''}</td>
             </tr>
             
             ${tax_row}
@@ -895,7 +889,11 @@ if (!auth) {
                 }, error: function (data) {
                     $(".loading").hide();
                     $("#dueModal").modal('toggle');
-                    Swal("Something went wrong!", 'Please refresh this page and try again','error');
+                    Swal.fire({
+                        icon: "error",
+                        title: "Oops...",
+                        text: "Something went wrong!",
+                    });
 
                 }
             });
@@ -1138,7 +1136,11 @@ if (!auth) {
 
                 }, error: function (data) {
                     $("#newCustomer").modal('hide');
-                    Swal.fire('Error', 'Something went wrong please try again', 'error')
+                    Swal.fire({
+                        icon: "error",
+                        title: "Oops...",
+                        text: "Something went wrong!",
+                    });
                 }
             })
         })
@@ -1786,8 +1788,6 @@ if (!auth) {
             e.preventDefault();
             let formData = $(this).serializeObject();
 
-            console.log(formData);
-
             if (ownUserEdit) {
                 if (formData.password != atob(user.password)) {
                     if (formData.password != formData.pass) {
@@ -2040,7 +2040,6 @@ $.fn.print = function () {
 
                 allTransactions = [...transactions];
 
-                console.log(transactions);
 
                 transactions.forEach((trans, index) => {
 
@@ -2072,10 +2071,10 @@ $.fn.print = function () {
                         <td class="nobr">${moment(trans.date).format('YYYY MMM DD hh:mm:ss')}</td>
                         <td>${settings.symbol + trans.total}</td>
                         <td>${trans.paid == "" ? "" : settings.symbol + trans.paid}</td>
-                        <td>${trans.change ? settings.symbol + Math.abs(trans.change).toFixed(2) : ''}</td>
+                        <td>${trans.paid == "" ? "" : settings.symbol + (parseInt(trans.paid) - parseInt(trans.total))}</td>
                         <td>${trans.paid == "" ? "" : trans.payment_type == 0 ? "Cash" : 'Card'}</td>
                         <td>${trans.till}</td>
-                        <td>${trans.user || ''}</td>
+                        <td>${trans.user_id || ''}</td>
                         <td>${trans.paid == "" 
                             ? '<button class="btn btn-dark"><i class="fa fa-search-plus"></i></button>' 
                             : '<button onClick="$(this).viewTransaction(' + index + ')" class="btn btn-info"><i class="fa fa-search-plus"></i></button>'
@@ -2114,7 +2113,7 @@ $.fn.print = function () {
                             });
                         }
 
-                        loadSoldProducts();
+                        loadSoldProducts(sold);
 
                         if (by_user == 0 && by_till == 0) {
                             userFilter(users);
@@ -2153,7 +2152,7 @@ function discend(a, b) {
 }
 
 
-function loadSoldProducts() {
+function loadSoldProducts(sold) {
 
     sold.sort(discend);
 
@@ -2195,7 +2194,6 @@ function userFilter(users) {
     $('#users').empty();
     $('#users').append(`<option value="0">All</option>`);
 
-    console.log(users);
     users.forEach(user => {
         let u = allUsers.filter(function (usr) {
             return usr.id == user;
@@ -2220,16 +2218,16 @@ function tillFilter(tills) {
 
 $.fn.viewTransaction = function (index) {
 
-    transaction_index = index;
+    // transaction_index = index;
 
-    let discount = allTransactions[index].discount;
+    let discount = allTransactions[index].discount ? allTransactions[index].discount : 0;
     let customer = allTransactions[index].customer == 0 ? 'Walk in Customer' : allTransactions[index].customer.username;
-    let refNumber = allTransactions[index].ref_number != "" ? allTransactions[index].ref_number : allTransactions[index].order;
-    let orderNumber = allTransactions[index].order;
+    let refNumber = allTransactions[index].ref_number != "" ? allTransactions[index].ref_number : allTransactions[index].id;
+    let orderNumber = allTransactions[index].id;
     let type = "";
     let tax_row = "";
     let items = "";
-    let products = allTransactions[index].items;
+    let products = JSON.parse(allTransactions[index].items);
 
     products.forEach(item => {
         items += "<tr><td>" + item.product_name + "</td><td>" + item.quantity + "</td><td>" + settings.symbol + parseFloat(item.price).toFixed(2) + "</td></tr>";
@@ -2248,7 +2246,7 @@ $.fn.viewTransaction = function (index) {
 
 
     if (allTransactions[index].paid != "") {
-        payment = `<tr>
+        let payment = `<tr>
                     <td>Paid</td>
                     <td>:</td>
                     <td>${settings.symbol + allTransactions[index].paid}</td>
@@ -2277,26 +2275,22 @@ $.fn.viewTransaction = function (index) {
 
 
 
-    receipt = `<div style="font-size: 10px;">                            
+    receipt = `<div style="font-size: 10px;" class="receipt">                            
         <p style="text-align: center;">
-        ${settings.img == "" ? settings.img : '<img style="max-width: 50px;max-width: 100px;" src ="' + settings.img + '" /><br>'}
-            <span style="font-size: 22px;">${settings.store}</span> <br>
+        ${settings.img ? '<img style="max-width: 50px;max-width: 100px;" src ="' + settings.img + '" /><br>' : '<span style="font-size: 22px;">${settings.store}</span> <br>'}
             ${settings.address_one} <br>
             ${settings.address_two} <br>
             ${settings.contact != '' ? 'Tel: ' + settings.contact + '<br>' : ''} 
             ${settings.tax != '' ? 'Vat No: ' + settings.tax + '<br>' : ''} 
     </p>
     <hr>
-    <left>
-        <p>
+        <p style="text-align:left;">
         Invoice : ${orderNumber} <br>
         Ref No : ${refNumber} <br>
         Customer : ${allTransactions[index].customer == 0 ? 'Walk in Customer' : allTransactions[index].customer.name} <br>
-        Cashier : ${allTransactions[index].user} <br>
+        Cashier : ${allTransactions[index].user_id} <br>
         Date : ${moment(allTransactions[index].date).format('DD MMM YYYY HH:mm:ss')}<br>
         </p>
-
-    </left>
     <hr>
     <table width="100%">
         <thead style="text-align: left;">
@@ -2309,24 +2303,21 @@ $.fn.viewTransaction = function (index) {
         <tbody>
         ${items}                
  
-        <tr>                        
-            <td><b>Subtotal</b></td>
-            <td>:</td>
-            <td><b>${settings.symbol}${allTransactions[index].subtotal}</b></td>
+        <tr>
+            <td colspan="2"><b>Subtotal</b></td>
+            <td style="text-align:right;"><b>${settings.symbol}${allTransactions[index].total}</b></td>
         </tr>
         <tr>
-            <td>Discount</td>
-            <td>:</td>
-            <td>${discount > 0 ? settings.symbol + parseFloat(allTransactions[index].discount).toFixed(2) : ''}</td>
+            <td colspan="2">Discount</td>
+            <td style="text-align:right;">${discount > 0 ? settings.symbol + parseFloat(allTransactions[index].discount).toFixed(2) : 0}</td>
         </tr>
         
         ${tax_row}
     
         <tr>
-            <td><h3>Total</h3></td>
-            <td><h3>:</h3></td>
-            <td>
-                <h3>${settings.symbol}${allTransactions[index].total}</h3>
+            <td colspan="2"><h5>Total</h5></td>
+            <td style="text-align:right;">
+                <h5>${settings.symbol} ${(parseInt(allTransactions[index].total) - discount)}</h5>
             </td>
         </tr>
         ${payment == 0 ? '' : payment}

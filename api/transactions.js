@@ -80,7 +80,7 @@ app.post("/new", (req, res) => {
       t.id,
       t.ref_number || "",
       t.status || 0,
-      t.customer || "0",
+      t.customer?.id || "0",
       t.date || new Date().toJSON(),
       t.user_id || 0,
       t.till || 0,
@@ -95,6 +95,7 @@ app.post("/new", (req, res) => {
 
     res.sendStatus(200);
   } catch (err) {
+    console.log(err.message);
     res.status(500).send(err.message);
   }
 });
