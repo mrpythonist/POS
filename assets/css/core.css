@@ -4,11 +4,12 @@ body {
   font-family: 'Noto Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   margin: 0;
   overflow-x: hidden;
+  overflow-y: hidden; /* prevent vertical scrollbars in the app shell */
   color: #797979;
 }
 html {
   position: relative;
-  min-height: 100%;
+  height: 100%;
   background: #ebeff2;
 }
 h1,
@@ -67,7 +68,8 @@ a:focus {
   text-decoration: none;
 }
 .container {
-  width: auto;
+  width: 100vw;
+  max-width: 100vw;
 }
 .container-alt {
   margin-left: auto;
@@ -88,9 +90,9 @@ a:focus {
   font-size: 13px;
 }
 #wrapper {
-  height: 100%;
+  height: 100vh; /* ensure full-screen height */
   overflow: hidden;
-  width: 100%;
+  width: 100vw; /* ensure full-screen width */
 }
 .page {
   bottom: 0;
@@ -2181,18 +2183,22 @@ body.fixed-left .side-menu.left {
     padding: 0;
   }
 
-  /* Receipt formatting */
+  /* Receipt formatting - Thermal Printer Optimized */
   .receipt {
-    font-size: 10px;
-    font-family: "Courier New", monospace; /* keeps alignment */
-    width: 280px; /* typical 80mm printer */
-    margin: 0 auto; /* center for print */
+    font-size: 14px;
+    font-family: "Courier New", monospace; /* monospace for uniform alignment */
+    width: 100%;
+    max-width: 300px; /* optimized for 80mm thermal printer */
+    margin: 0; /* remove all margins */
+    padding: 2px; /* minimal padding */
+    background: white;
+    line-height: 1.3;
   }
 
   .receipt hr {
     border: none;
     border-top: 1px dashed #000;
-    margin: 4px 0;
+    margin: 6px 0;
   }
 
   .receipt table {
@@ -2202,9 +2208,36 @@ body.fixed-left .side-menu.left {
 
   .receipt th,
   .receipt td {
-    font-size: 10px;
+    font-size: 13px;
     padding: 2px 0;
     text-align: left;
+  }
+
+  /* Thermal printer specific styles */
+  @media print {
+    .receipt {
+      width: 100% !important;
+      max-width: 300px !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      font-size: 14px !important;
+    }
+    
+    .receipt * {
+      color: black !important;
+      background: white !important;
+    }
+    
+    /* Remove any browser default margins */
+    @page {
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+    
+    body {
+      margin: 0 !important;
+      padding: 0 !important;
+    }
   }
 
   .receipt td:last-child {

@@ -13,4 +13,6 @@ contextBridge.exposeInMainWorld("api", {
   storeDelete: (key) => ipcRenderer.invoke("store-delete", key),
 
   getMacAddress: () => ipcRenderer.invoke("get-mac-address"),
+
+  printReceipt: (html, autoPrint) => ipcRenderer.send("print-receipt", html, autoPrint)
 });

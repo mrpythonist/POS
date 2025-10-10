@@ -2,7 +2,9 @@
 import express from "express";
 import bodyParser from "body-parser";
 import db from "../db/db.js";
-import Inventory from "./inventory.js";
+import createInventoryRoutes from "./inventory.js";
+
+const Inventory = createInventoryRoutes("./uploads");
 
 const app = express();
 app.use(bodyParser.json());
@@ -34,7 +36,7 @@ app.get("/on-hold", (req, res) => {
 
 app.get("/customer-orders", (req, res) => {
   try {
-    const rows = db.prepare("SELECT * FROM transactions WHERE customer != '0' AND status = 0 AND ref_number = ''").all();
+    const rows = db.prepare("SELECT * FROM transactions WHERE customer != 'Walk in customer' AND status = 0 AND ref_number = ''").all();
     res.json(rows);
   } catch (err) {
     res.status(500).send(err.message);
@@ -78,7 +80,7 @@ app.post("/new", (req, res) => {
       t.id,
       t.ref_number || "",
       t.status || 0,
-      t.customer?.id || "0",
+      t.customer ? JSON.stringify(t.customer) : JSON.stringify({}),
       t.date || new Date().toJSON(),
       t.user || "Anonymous",
       t.order_type || "N/A",
@@ -101,7 +103,7 @@ app.post("/new", (req, res) => {
 
     res.sendStatus(200);
   } catch (err) {
-    console.log(err.message);
+    console.error(err.message);
     res.status(500).send(err.message);
   }
 });
@@ -109,8 +111,8 @@ app.post("/new", (req, res) => {
 app.put("/new", (req, res) => {
   try {
     const t = req.body;
+    t.id = t.id || t.order; // <-- fix here
 
-    console.log(t);
     const changes = db.prepare(`
       UPDATE transactions
       SET ref_number = ?, status = ?, customer = ?, date = ?, user = ?, order_type = ?, discount = ?, gst = ?, sc = ?, till = ?, subtotal = ?, total = ?, paid = ?, payment_method = ?, account_type = ?, account_no = ?, items = ?
@@ -118,7 +120,7 @@ app.put("/new", (req, res) => {
     `).run(
       t.ref_number || "",
       t.status || 0,
-      t.customer || "0",
+      t.customer ? JSON.stringify(t.customer) : JSON.stringify({}),
       t.date || new Date().toJSON(),
       t.user || "Anonymous",
       t.order_type || "N/A",
@@ -139,16 +141,15 @@ app.put("/new", (req, res) => {
     if (changes === 0) return res.status(404).send("Transaction not found");
     res.sendStatus(200);
   } catch (err) {
-    console.log(err.message);
+    console.error(err.message);
     res.status(500).send(err.message);
   }
 });
 
 app.post("/delete", (req, res) => {
   try {
-    const orderId = req.body.orderId;
-    console.log(orderId);
-    const changes = db.prepare("DELETE FROM transactions WHERE id = ?").run(orderId).changes;
+    const id = req.body.id;
+    const changes = db.prepare("DELETE FROM transactions WHERE id = ?").run(id).changes;
     if (changes === 0) return res.status(404).send("Transaction not found");
     res.sendStatus(200);
   } catch (err) {

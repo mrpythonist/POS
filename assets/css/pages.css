@@ -3,21 +3,59 @@
   display: none;
 }
 
+/* Prevent left-shift or horizontal layout jumps */
+.row {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+[class^="col-"] {
+  float: left;
+}
+
 #card-box tr {display: block; }
 #card-box th, #card-box td:first-child{ width: 10px; }
 #card-box th, #card-box td:nth-child(2){ width: 150px; }
 
 #cartTable tbody { 
   display: block; 
-  height: calc(100vh - 425px);
-  overflow: auto;
+  height: 100%; /* fill flex space */
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 #parent { 
   display: block; 
   height: calc(100vh - 215px);
-  overflow: auto;
+  overflow-y: auto; /* allow scrolling for products grid */
+  overflow-x: hidden;
+}
+
+/* Keep left (cart) panel same height as right section and prevent button push */
+#card-box {
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -ms-flex-direction: column;
+  flex-direction: column;
+  height: calc(100vh - 94px);
+}
+
+#card-box > .col-md-12 {
+  -ms-flex: 0 0 auto;
+  flex: 0 0 auto;
+}
+
+/* The immediate div after .col-md-12 wraps the cart table */
+#card-box > div:nth-of-type(2) {
+  -ms-flex: 1 1 auto;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: hidden;
+}
+
+#cartTable {
+  height: 100%;
 }
 
 

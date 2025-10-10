@@ -31,6 +31,8 @@ function createWindow() {
     width: screenSize.width,
     height: screenSize.height,
     frame: false,
+    fullscreen: true,
+    fullscreenable: true,
     minWidth: 1200,
     minHeight: 750,
     webPreferences: {
@@ -40,7 +42,7 @@ function createWindow() {
     },
   });
 
-  mainWindow.maximize();
+  mainWindow.setFullScreen(true);
   mainWindow.show();
 
   // Load local HTML (all scripts are included via <script> tags in HTML)
@@ -103,6 +105,66 @@ ipcMain.handle("get-img-path", async (_, imgName) => {
 
   return `file://${fullPath}`;
 });
+
+
+// --- Silent printing handler ---
+ipcMain.on("print-receipt", (event, receiptHtml, autoPrint) => {
+  const printWindow = new BrowserWindow({
+    show: false,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+
+  // Load receipt content
+  printWindow.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(receiptHtml));
+
+  // Ensure images finish loading before printing to avoid missing logo in output
+  printWindow.webContents.on("did-finish-load", async () => {
+    try {
+      // Wait for all images to complete loading (or error) before printing
+      await printWindow.webContents.executeJavaScript(`
+        new Promise((resolve) => {
+          const images = Array.from(document.images || []);
+          if (images.length === 0) return resolve();
+          let done = 0;
+          const check = () => { if (++done >= images.length) resolve(); };
+          images.forEach(img => {
+            if (img.complete) return check();
+            img.addEventListener('load', check, { once: true });
+            img.addEventListener('error', check, { once: true });
+          });
+          // Failsafe timeout in case an image never resolves
+          setTimeout(resolve, 2500);
+        });
+      `);
+
+      printWindow.webContents.print(
+        {
+          silent: !!autoPrint,
+          printBackground: true,
+          deviceName: "",
+          // margins: { marginType: "none" },
+          // pageSize: {
+          //   width: 80_000,  // 80mm in microns
+          //   height: 100_000 // 200mm (adjust based on receipt length)
+          // }
+        },
+        (success, errorType) => {
+          if (!success) {
+            console.error("Print failed:", errorType);
+          }
+          printWindow.close();
+        }
+      );
+    } catch (err) {
+      console.error("Error before printing:", err);
+      printWindow.close();
+    }
+  });
+});
+
 
 // --- Optional: Quit / reload from renderer ---
 ipcMain.on("app-quit", () => app.quit());

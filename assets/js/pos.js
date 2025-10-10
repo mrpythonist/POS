@@ -9,6 +9,7 @@
 // --- Variables ---
 let cart = [];
 let index = 0;
+let autoPrint = false;
 let allUsers = [];
 let allProducts = [];
 let allCategories = [];
@@ -23,6 +24,8 @@ let vat = 0;
 let gst = 0;
 let serviceCharges = 0;
 let discount = 0;
+let discountAmount = 0;
+let customers = {};
 let account_type = '';
 let account_no = '';
 // let perms = null;
@@ -63,6 +66,7 @@ let auth_empty = "Please enter a username and password";
 let holdOrderlocation = $("#randerHoldOrders");
 let customerOrderLocation = $("#randerCustomerOrders");
 let settings;
+let delAddr = '';
 let platform;
 let user = {};
 let start = moment().startOf("month");
@@ -263,7 +267,9 @@ if (!auth) {
 
 
                     const item_info = `
-                        <div class="col-lg-2 box ${item.category}" onclick="$(this).addToCart(${item.id}, ${item.quantity}, ${item.stock})">
+                        <div class="col-lg-2 box" 
+                            data-category="${item.category}" 
+                            onclick="$(this).addToCart(${item.id}, ${item.quantity}, ${item.stock})">
                             <div class="widget-panel widget-style-2">                    
                                 <div id="image">
                                     <img src="${imgUrl}" id="product_img" alt="">
@@ -272,7 +278,7 @@ if (!auth) {
                                     <div class="name" id="product_name">${item.name}</div> 
                                     <span class="sku">${item.sku || ''}</span>
                                     <span class="stock">STOCK </span>
-                                    <span class="count">${item.stock == 1 ? item.quantity : 'N/A'}</span>
+                                    <span class="count">${item.stock == 1 ? (item.quantity > 0 ? item.quantity : 'N/A') : 'N/A'}</span>
                                 </div>
                                 <sp class="text-success text-center">
                                     <b data-plugin="counterup">${settings.symbol + item.price}</b>
@@ -283,9 +289,40 @@ if (!auth) {
                     $('#parent').append(item_info);
                 }
 
+                // Populate category filter dropdown
+                $('#categoryFilter').html('<option value="all">All Categories</option>');
                 categories.forEach(category => {
                     const c = allCategories.filter(ctg => ctg.id == category);
-                    $('#categories').append(`<button type="button" id="${category}" class="btn btn-categories btn-white waves-effect waves-light">${c.length > 0 ? c[0].name : ''}</button>`);
+                    const categoryName = c.length > 0 ? c[0].name : category;
+                    $('#categoryFilter').append(`<option value="${category}">${categoryName}</option>`);
+                });
+
+                // Add category filter event handler
+                $('#categoryFilter').on('change', function() {
+                    const selectedCategory = $(this).val();
+                    if (selectedCategory === 'all') {
+                        $('.box').show();
+                    } else {
+                        $('.box').hide();
+                        $(`.box`).filter(function() {
+                            return $(this).data('category') === selectedCategory;
+                        }).show();
+                    }
+                });
+
+
+                // Add search functionality
+                $('#search').on('input', function() {
+                    const searchTerm = $(this).val().toLowerCase();
+                    $('.box').each(function() {
+                        const productName = $(this).find('.name').text().toLowerCase();
+                        const sku = $(this).find('.sku').text().toLowerCase();
+                        if (productName.includes(searchTerm) || sku.includes(searchTerm)) {
+                            $(this).show();
+                        } else {
+                            $(this).hide();
+                        }
+                    });
                 });
 
             } catch (err) {
@@ -301,40 +338,48 @@ if (!auth) {
                 allCategories.forEach(category => {
                     $('#category').append(`<option value="${category.id}">${category.name}</option>`);
                 });
+            }).fail(function(err) {
+                console.error("Failed to load categories:", err);
+                allCategories = [];
             });
         }
 
 
         function loadCustomers() {
 
-            $.get(api + 'customers/all', function (customers) {
+            $.get(api + 'customers/all', function (data) {
+                customers = {...data};
 
-                $('#customer').html(`<option value="0" selected="selected">Walk in customer</option>`);
+                $('#customer').html(`<option value="Walk in customer" selected="selected">Walk in customer</option>`);
 
-                customers.forEach(cust => {
+                data.forEach(cust => {
+                    let customerOpt = `<option value='${JSON.stringify({
+                        id: cust.id,
+                        name: cust.name,
+                        phone: cust.phone,
+                        email: cust.email,
+                        address: cust.address
+                    })}'>${cust.name}  (${cust?.phone})</option>`;
 
-                    let customer = `<option value='{"id": ${cust.id}, "name": "${cust.name}"}'>${cust.name}</option>`;
-                    $('#customer').append(customer);
+                    $('#customer').append(customerOpt);
                 });
 
-                //  $('#customer').chosen();
+                 $('#customer').chosen();
 
             });
 
         }
 
         function loadOrderType() {
-
             let order_types = ['Dine-In', 'Take-Away', 'Delivery'];
 
-            $('#order_type').html(`<option value="" selected="selected">Order Type</option>`);
+            $('#order_type').html(''); // clear previous options
 
             order_types.forEach(ord => {
-
-                let order_t = `<option value='${ord}'>${ord}</option>`;
+                let selected = ord === 'Dine-In' ? ' selected' : '';
+                let order_t = `<option value="${ord}"${selected}>${ord}</option>`;
                 $('#order_type').append(order_t);
             });
-
         }
 
 
@@ -343,7 +388,13 @@ if (!auth) {
             if (stock == 1) {
                 if (count > 0) {
                     $.get(api + 'inventory/product/' + id, function (data) {
-                        $(this).addProductToCart(data);
+                        if (data && data.id) {
+                            $(this).addProductToCart(data);
+                        } else {
+                            Swal.fire('Error', 'Product not found', 'error');
+                        }
+                    }).fail(function() {
+                        Swal.fire('Error', 'Failed to load product', 'error');
                     });
                 }
                 else {
@@ -356,7 +407,13 @@ if (!auth) {
             }
             else {
                 $.get(api + 'inventory/product/' + id, function (data) {
-                    $(this).addProductToCart(data);
+                    if (data && data.id) {
+                        $(this).addProductToCart(data);
+                    } else {
+                        Swal.fire('Error', 'Product not found', 'error');
+                    }
+                }).fail(function() {
+                    Swal.fire('Error', 'Failed to load product', 'error');
                 });
             }
 
@@ -383,8 +440,7 @@ if (!auth) {
                 cache: false,
                 processData: false,
                 success: function (data) {
-
-                    if (data.id != undefined && data.quantity >= 1) {
+                    if (data && data.id != undefined) {
                         $(this).addProductToCart(data);
                         $("#searchBarCode").get(0).reset();
                         $("#basic-addon2").empty();
@@ -392,7 +448,7 @@ if (!auth) {
                             $('<i>', { class: 'glyphicon glyphicon-ok' })
                         )
                     }
-                    else if (data.quantity < 1) {
+                    else if (data && data.quantity < 1) {
                         Swal.fire(
                             'Out of stock!',
                             'This item is currently unavailable',
@@ -495,18 +551,22 @@ if (!auth) {
             let grossTotal = 0;
 
             // count total items in cart
-            $('#total').text(cart.length);
+            $('#total').text(cart.length || 0);
 
             // calculate subtotal (price * quantity)
-            $.each(cart, function (index, data) {
-                subtotal += data.quantity * data.price;
-            });
+            if (cart && cart.length > 0) {
+                $.each(cart, function (index, data) {
+                    if (data && data.quantity && data.price) {
+                        subtotal += parseFloat(data.quantity) * parseFloat(data.price);
+                    }
+                });
+            }
 
             // get discount percentage
             let discountPercent = parseFloat($("#inputDiscount").val()) || 0;
 
             // calculate discount amount (percentage of subtotal)
-            let discountAmount = (subtotal * discountPercent) / 100;
+            discountAmount = (subtotal * discountPercent) / 100;
 
             // apply discount
             let total = subtotal - discountAmount;
@@ -519,7 +579,7 @@ if (!auth) {
             }
 
             // update price (after discount)
-            $('#price').text(settings.symbol + total.toFixed(2));
+            $('#price').text((settings?.symbol || '$') + subtotal.toFixed(2));
 
             // assign subtotal (before discount)
             subTotal = subtotal;
@@ -539,7 +599,7 @@ if (!auth) {
             orderTotal = grossTotal.toFixed(2);
 
             // update UI
-            $("#gross_price").text(settings.symbol + grossTotal.toFixed(2));
+            $("#gross_price").text((settings?.symbol || '$') + grossTotal.toFixed(2));
             $("#payablePrice").val(grossTotal);
         };
 
@@ -549,6 +609,11 @@ if (!auth) {
         $.fn.renderTable = function (cartList) {
             $('#cartTable > tbody').empty();
             $(this).calculateCart();
+            
+            if (!cartList || cartList.length === 0) {
+                return;
+            }
+            
             $.each(cartList, function (index, data) {
                 $('#cartTable > tbody').append(
                     $('<tr>').append(
@@ -564,12 +629,9 @@ if (!auth) {
                                         $('<i>', { class: 'fa fa-minus' })
                                     )
                                 ),
-                                $('<input>', {
-                                    class: 'form-control',
-                                    type: 'text',
-                                    value: data.quantity,
-                                    disabled: true,
-                                    onInput: '$(this).qtInput(' + index + ')'
+                                $('<span>', {
+                                    class: 'form-control text-center',
+                                    text: data.quantity
                                 }),
                                 $('<div>', { class: 'input-group-btn btn-sm' }).append(
                                     $('<button>', {
@@ -581,7 +643,7 @@ if (!auth) {
                                 )
                             )
                         ),
-                        $('<td>', { text: settings.symbol + (data.price * data.quantity).toFixed(2) }),
+                        $('<td>', { text: settings.symbol + data.price.toFixed(2) }),
                         $('<td>').append(
                             $('<button>', {
                                 class: 'btn btn-danger btn-xs',
@@ -605,18 +667,21 @@ if (!auth) {
 
         $.fn.qtIncrement = function (i) {
 
+            if (!cart || !cart[i]) {
+                return;
+            }
+
             item = cart[i];
 
             let product = allProducts.filter(function (selected) {
                 return selected.id == parseInt(item.id);
             });
 
-            if (product[0].stock == 1) {
+            if (product.length > 0 && product[0].stock == 1) {
                 if (item.quantity < product[0].quantity) {
                     item.quantity += 1;
                     $(this).renderTable(cart);
                 }
-
                 else {
                     Swal.fire(
                         'No more stock!',
@@ -634,8 +699,12 @@ if (!auth) {
 
 
         $.fn.qtDecrement = function (i) {
+            if (!cart || !cart[i]) {
+                return;
+            }
+            
+            item = cart[i];
             if (item.quantity > 1) {
-                item = cart[i];
                 item.quantity -= 1;
                 $(this).renderTable(cart);
             }
@@ -643,6 +712,10 @@ if (!auth) {
 
 
         $.fn.qtInput = function (i) {
+            if (!cart || !cart[i]) {
+                return;
+            }
+            
             item = cart[i];
             item.quantity = $(this).val();
             $(this).renderTable(cart);
@@ -667,6 +740,7 @@ if (!auth) {
                         cart = [];
                         $(this).renderTable(cart);
                         holdOrder = 0;
+                        $(this).clearOrderData();
 
                         Swal.fire(
                             'Cleared!',
@@ -677,6 +751,40 @@ if (!auth) {
                 });
             }
 
+        }
+
+        $.fn.clearOrderData = function () {
+            // Clear cart
+            cart = [];
+            
+            // Clear form fields
+            $("#customer option:selected").removeAttr('selected');
+            // $("#customer option").filter(function () {
+            //     return $(this).text() == "Walk in customer";
+            // }).prop("selected", true);
+            $("#customer option").first().prop("selected", true);
+            $("#customer").trigger("chosen:updated");
+            $("#order_type").val("Dine-In");
+            $("#refNumber").val('');
+            $("#inputDiscount").val('');
+            $("#payment").val('');
+            $("#change").text('');
+            $("#accountType").val('');
+            $('#deliveryAddress').hide();
+            $('#deliveryAddress').val('');
+            
+            // Reset payment type
+            paymentType = 0;
+            $("#cash").addClass('active').siblings().removeClass('active');
+            $("#cardInfo").hide();
+            $("#onlinePaymentInfo").hide();
+            $("#confirmPayment").hide();
+            
+            // Clear hold order
+            holdOrder = 0;
+            
+            // Re-render table
+            $(this).renderTable(cart);
         }
 
 
@@ -721,19 +829,36 @@ if (!auth) {
 
             cart.forEach(item => {
 
-                items += "<tr><td>" + item.product_name + "</td><td>" + item.quantity + "</td><td>" + settings.symbol + parseFloat(item.price).toFixed(2) + "</td></tr>";
+                items += `<div style="display: flex; justify-content: space-between; margin-bottom: 3px; font-size: 13px;">
+                    <span style="flex: 2; text-align: left;">${item.product_name}</span>
+                    <span style="flex: 0.5; text-align: center;">${item.quantity}</span>
+                    <span style="flex: 1; text-align: right;">${settings.symbol}${parseFloat(item.price).toFixed(2)}</span>
+                </div>`;
 
             });
 
             let currentTime = new Date(moment());
 
             let discount = $("#inputDiscount").val();
-            let customer = JSON.parse($("#customer").val());
+            let customerInput = $("#customer").val();
+            let customer;
+            try {
+                // only parse if it looks like JSON
+                if (customerInput.startsWith('{') || customerInput.startsWith('[')) {
+                    customer = JSON.parse(customerInput);
+                } else {
+                    customer = customerInput; // plain string
+                }
+            } catch (e) {
+                customer = customerInput; // fallback
+            }
+
             let order_type = $("#order_type").val();
             let date = moment(currentTime).format("YYYY-MM-DD HH:mm:ss");
             let paid = $("#payment").val() == "" ? "" : parseFloat($("#payment").val()).toFixed(2);
             let change = $("#change").text() == "" ? "" : parseFloat($("#change").text()).toFixed(2);
             let refNumber = $("#refNumber").val();
+            account_type = $("#accountType").val();
             let orderNumber = holdOrder;
             let type = "";
             let tax_row = "";
@@ -747,27 +872,27 @@ if (!auth) {
                 case 2: type = "Card";
                     break;
 
+                case 3: type = "Online";
+                    break;
+
                 default: type = "Cash";
 
             }
 
 
             if (paid != "") {
-                payment = `<tr>
-                        <td>Paid</td>
-                        <td>:</td>
-                        <td>${settings.symbol + paid}</td>
-                    </tr>
-                    <tr>
-                        <td>Change</td>
-                        <td>:</td>
-                        <td>${settings.symbol + Math.abs(change).toFixed(2)}</td>
-                    </tr>
-                    <tr>
-                        <td>Method</td>
-                        <td>:</td>
-                        <td>${type}</td>
-                    </tr>`
+                payment = `<div style="display: flex; justify-content: space-between; margin-top: 5px; font-size: 13px;">
+                        <span>Paid</span>
+                        <span>${settings.symbol + paid}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 13px;">
+                        <span>Change</span>
+                        <span>${settings.symbol + Math.abs(change).toFixed(2)}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 13px;">
+                        <span>Method</span>
+                        <span>${type} ${paymentType === 3 && account_type ? `(${account_type})` : ''}</span>
+                    </div>`
             }
 
 
@@ -784,10 +909,10 @@ if (!auth) {
 
             if (status == 0) {
 
-                if ($("#customer").val() == 0 && $("#refNumber").val() == "") {
+                if ($("#customer").val() == 'Walk in customer' && $("#refNumber").val() == "") {
                     Swal.fire(
                         'Reference Required!',
-                        'You either need to select a customer <br> or enter a reference!',
+                        'You either need to select a customer <br> or enter a table!',
                         'warning'
                     )
 
@@ -809,68 +934,80 @@ if (!auth) {
                 method = 'POST'
             }
 
+            if(order_type === 'Delivery') {
+            delAddr = $("#deliveryAddress").val();
+        }
 
-            receipt = `<div style="font-size: 10px;"  class="receipt">                            
-        <p style="text-align: center;">
-         ${settings.img ? '<img style="max-width: 50px;max-width: 100px;" src ="' + settings.img + '" /><br>' : '<span style="font-size: 22px;">${settings.store}</span> <br>'}
-            ${settings.address_one} <br>
-            ${settings.address_two} <br>
-            ${settings.contact != '' ? 'Tel: ' + settings.contact + '<br>' : ''} 
-        </p>
-        <hr>
-            <p  style="text-align:left;">
-            Order No : ${orderNumber} <br>
-            Ref No : ${refNumber == "" ? orderNumber : refNumber} <br>
-            Customer : ${customer == 0 ? 'Walk in customer' : customer.name} <br>
-            Cashier : ${user.fullname} <br>
-            Date : ${date}<br>
-            </p>
-        <hr>
-        <table width="100%">
-            <thead style="text-align: left;">
-            <tr>
-                <th>Item</th>
-                <th>Qty</th>
-                <th>Price</th>
-            </tr>
-            </thead>
-            <tbody>
+
+            const logoUrl = (function(){
+                const src = settings.img || '';
+                if (!src) return '';
+                if (/^(data:|https?:\/\/|file:\/\/)/i.test(src)) return src;
+                return `${api}${src}`;
+            })();
+
+            receipt = `<div style="font-family: 'Courier New', monospace; font-size: 14px; width: 100%; max-width: 300px; margin: 0; padding: 2px; background: white;" class="receipt">                            
+        <div style="text-align: center; margin-bottom: 5px;">
+         ${logoUrl ? '<img style="max-width: 100px; max-height: 80px;" src ="' + logoUrl + '" /><br>' : '<div style=\"font-size: 20px; font-weight: bold; margin-bottom: 5px;\">' + settings.store + '</div>'}
+            <div style="font-size: 13px; line-height: 1.3;">${settings.address_one}</div>
+            <div style="font-size: 13px; line-height: 1.3;">${settings.address_two}</div>
+            ${settings.contact != '' ? '<div style="font-size: 13px;">Tel: ' + settings.contact + '</div>' : ''} 
+        </div>
+        <div style="border-top: 1px dashed #000; margin: 5px 0;"></div>
+            <div style="font-size: 13px; line-height: 1.4;">
+            <div style="display: flex; justify-content: space-between;"><span style="font-weight: bold;">Order No:</span><span>${orderNumber}</span></div>
+            ${order_type === 'Dine-In' ? `<div style="display: flex; justify-content: space-between;"><span style="font-weight: bold;">Table No:</span><span>${refNumber == "" ? orderNumber : refNumber}</span></div>` : ''}
+            <div style="display: flex; justify-content: space-between;"><span style="font-weight: bold;">Customer:</span><span>${customer == 0 || customer === '0' ? 'Walk in customer' : (typeof customer === 'object' ? customer.name : customer)}</span></div>
+            ${order_type === 'Delivery' && (customer != 0 && customer !== '0') && typeof customer === 'object' ? `
+                <div style="display: flex; justify-content: space-between;"><span style="font-weight: bold;">Phone:</span><span>${customer.phone || 'N/A'}</span></div>
+                <div style="display: flex; justify-content: space-between;"><span style="font-weight: bold;">Address:</span><span>${delAddr || 'N/A'}</span></div>
+            ` : ''}
+            <div style="display: flex; justify-content: space-between;"><span style="font-weight: bold;">Order Type:</span><span>${order_type}</span></div>
+            <div style="display: flex; justify-content: space-between;"><span style="font-weight: bold;">Date:</span><span>${date}</span></div>
+            </div>
+        <div style="border-top: 1px dashed #000; margin: 5px 0;"></div>
+        <div style="font-size: 13px;">
+            <div style="display: flex; justify-content: space-between; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 3px; margin-bottom: 5px;">
+                <span>Item</span>
+                <span>Qty</span>
+                <span>Price</span>
+            </div>
             ${items}                
      
-            <tr>
-                <td colspan="2"><b>Subtotal</b></td>
-                <td style="text-align:right;"><b>${settings.symbol}${subTotal.toFixed(2)}</b></td>
-                </tr>
-                <tr>
-                <td colspan="2">Discount</td>
-                <td style="text-align:right;">${discount > 0 ? settings.symbol + parseFloat(discount).toFixed(2) : ''}</td>
-            </tr>
+            <div style="display: flex; justify-content: space-between; margin-top: 5px;">
+                <span style="font-weight: bold;">Subtotal</span>
+                <span style="font-weight: bold;">${settings.symbol}${subTotal.toFixed(2)}</span>
+            </div>
+            ${discount > 0 ? `<div style="display: flex; justify-content: space-between;">
+                <span>Discount</span>
+                <span>${settings.symbol}${parseFloat(discountAmount).toFixed(2)} (${discount}%)</span>
+            </div>` : ''}
             
-            ${tax_row}
         
-            <tr>
-                <td><h3>Total</h3></td>
-                <td><h3>:</h3></td>
-                <td>
-                    <h3>${settings.symbol}${parseFloat(orderTotal).toFixed(2)}</h3>
-                </td>
-            </tr>
+            <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 15px; margin-top: 8px; padding-top: 5px; border-top: 1px solid #000;">
+                <span>TOTAL</span>
+                <span>${settings.symbol}${parseFloat(orderTotal).toFixed(2)}</span>
+            </div>
             ${payment == 0 ? '' : payment}
-            </tbody>
-            </table>
-            <br>
-            <hr>
-            <br>
-            <p style="text-align: center;">
+            </div>
+            <div style="border-top: 1px dashed #000; margin: 5px 0;"></div>
+            <div style="text-align: center; font-size: 12px; margin-top: 5px; margin-bottom: 10px;">
              ${settings.footer}
-             </p>
+             </div>
+             
+            <div style="border-top: 1px dashed #000; margin: 5px 0;"></div>
+            Follow US Facebook
+            <div style="text-align: center; font-size: 12px; margin-top: 5px; margin-bottom: 10px;">
+             fb.com/flavorspkofficial <br>
+             
+            <div style="border-top: 1px dashed #000; margin: 5px 0;"></div>
             </div>`;
 
 
             if (status == 3) {
                 if (cart.length > 0) {
-
-                    printJS({ printable: receipt, type: 'raw-html' });
+                    autoPrint = $('#autoPrintReceipt').is(':checked');
+                    window.api.printReceipt(receipt, autoPrint);
 
                     $(".loading").hide();
                     return;
@@ -883,6 +1020,24 @@ if (!auth) {
                 }
             }
 
+
+            // Set account_type for online payments
+            if (paymentType === 3) {
+                account_type = $("#accountType").val();
+                if (!account_type) {
+                    Swal.fire(
+                        'Payment Method Required!',
+                        'Please select a payment method for online payment.',
+                        'warning'
+                    );
+                    return;
+                }
+            } else {
+                account_type = '';
+            }
+
+            if(customer.address)
+                customer.address = delAddr || '';
 
             let data = {
                 order: orderNumber,
@@ -901,7 +1056,6 @@ if (!auth) {
                 total: orderTotal,
                 paid: paid,
                 change: change,
-                id: orderNumber,
                 till: platform.till,
                 mac: platform.mac,
                 user: user.fullname,
@@ -930,6 +1084,7 @@ if (!auth) {
                     $(this).getHoldOrders();
                     $(this).getCustomerOrders();
                     $(this).renderTable(cart);
+                    $(this).clearOrderData();
 
                 }, error: function (data) {
                     $(".loading").hide();
@@ -967,26 +1122,44 @@ if (!auth) {
             });
         };
 
+         $.fn.tryParseJSON = function (str) {
+            try {
+                var obj = JSON.parse(str);
+                if (obj && typeof obj === "object") {
+                    return obj;
+                }
+            } catch (e) {}
+            return null;
+        }
+
 
         $.fn.randerHoldOrders = function (data, renderLocation, orderType) {
             $.each(data, function (index, order) {
+                var customerObj = $(this).tryParseJSON(order.customer);
+                var customerName = customerObj ? customerObj.name : order.customer.replace(/(^"|"$)/g, "");
+
+                var itemsArray = $(this).tryParseJSON(order.items);
+                var itemCount = Array.isArray(itemsArray) ? itemsArray.length : 0;
                 $(this).calculatePrice(order);
                 renderLocation.append(
                     $('<div>', { class: orderType == 1 ? 'col-md-3 order' : 'col-md-3 customer-order' }).append(
                         $('<a>').append(
                             $('<div>', { class: 'card-box order-box' }).append(
                                 $('<p>').append(
-                                    $('<b>', { text: 'Ref :' }),
+                                    $('<b>', { text: 'Table :' }),
                                     $('<span>', { text: order.ref_number, class: 'ref_number' }),
+                                    $('<br>'),
+                                    $('<b>', { text: 'Order Type :' }),
+                                    $('<span>', { text: order.order_type, class: 'order_type' }),
                                     $('<br>'),
                                     $('<b>', { text: 'Price :' }),
                                     $('<span>', { text: order.total, class: "label label-info", style: 'font-size:14px;' }),
                                     $('<br>'),
                                     $('<b>', { text: 'Items :' }),
-                                    $('<span>', { text: order.items.length }),
+                                    $('<span>', { text: itemCount }),
                                     $('<br>'),
                                     $('<b>', { text: 'Customer :' }),
-                                    $('<span>', { text: order.customer != 0 ? order.customer.name : 'Walk in customer', class: 'customer_name' })
+                                    $('<span>', { text: customerName, class: 'customer_name' })
                                 ),
                                 $('<button>', { class: 'btn btn-danger del', onclick: '$(this).deleteOrder(' + index + ',' + orderType + ')' }).append(
                                     $('<i>', { class: 'fa fa-trash' })
@@ -1037,22 +1210,47 @@ if (!auth) {
         $.fn.orderDetails = function (index, orderType) {
 
             $('#refNumber').val('');
-
             if (orderType == 1) {
+                const order = holdOrderList[index];
 
-                $('#refNumber').val(holdOrderList[index].ref_number);
+                // Set reference number
+                $('#refNumber').val(order.ref_number);
 
-                $("#customer option:selected").removeAttr('selected');
+                // Parse customer safely
+                let customerObj = null;
+                if (order.customer) {
+                    try {
+                        customerObj = typeof order.customer === "string" ? JSON.parse(order.customer) : order.customer;
+                    } catch (e) {
+                        customerObj = { name: order.customer };
+                    }
+                }
 
-                $("#customer option").filter(function () {
-                    return $(this).text() == "Walk in customer";
-                }).prop("selected", true);
+                // Set customer select
+                if (customerObj && customerObj.name) {
+                    $("#customer option:selected").removeAttr('selected');
+                    $("#customer option").filter(function () {
+                        return $(this).text().trim().startsWith(customerObj.name);
+                    }).prop("selected", true);
+                } else {
+                    $("#customer option:selected").removeAttr('selected');
+                    $("#customer option").filter(function () {
+                        return $(this).text() == "Walk in customer";
+                    }).prop("selected", true);
+                }
+                $("#customer").trigger("chosen:updated");
 
-                holdOrder = holdOrderList[index].id;
+                // Set order type
+                if (order.order_type) {
+                    $("#order_type").val(order.order_type);
+                    $("#order_type").trigger("change");
+                }
+
+                holdOrder = order.id;
                 cart = [];
 
                 // Parse items safely
-                let items = holdOrderList[index].items;
+                let items = order.items;
                 if (typeof items === "string") {
                     try { items = JSON.parse(items); } catch(e) { items = []; }
                 }
@@ -1068,21 +1266,51 @@ if (!auth) {
                     cart.push(item);
                 });
 
-            } else if (orderType == 2) {
+                $(this).renderTable(cart);
+                $("#holdOrdersModal").modal('hide');
+                $("#customerModal").modal('hide');
+            }
+            else if (orderType == 2) {
+                const order = customerOrderList[index];
 
-                $('#refNumber').val('');
+                // Set reference number
+                $('#refNumber').val(order.ref_number);
 
-                $("#customer option:selected").removeAttr('selected');
+                // Parse customer safely
+                let customerObj = null;
+                if (order.customer) {
+                    try {
+                        customerObj = typeof order.customer === "string" ? JSON.parse(order.customer) : order.customer;
+                    } catch (e) {
+                        customerObj = { name: order.customer };
+                    }
+                }
 
-                $("#customer option").filter(function () {
-                    return $(this).text() == customerOrderList[index].customer.name;
-                }).prop("selected", true);
+                // Set customer select
+                if (customerObj && customerObj.name) {
+                    $("#customer option:selected").removeAttr('selected');
+                    $("#customer option").filter(function () { 
+                        return $(this).text().trim().startsWith(customerObj.name);
+                    }).prop("selected", true);
+                } else {
+                    $("#customer option:selected").removeAttr('selected');
+                    $("#customer option").filter(function () {
+                        return $(this).text() == "Walk in customer";
+                    }).prop("selected", true);
+                }
+                $("#customer").trigger("chosen:updated");
 
-                holdOrder = customerOrderList[index].id;
+                // Set order type
+                if (order.order_type) {
+                    $("#order_type").val(order.order_type);
+                    $("#order_type").trigger("change");
+                }
+
+                holdOrder = order.id;
                 cart = [];
 
                 // Parse items safely
-                let items = customerOrderList[index].items;
+                let items = order.items;
                 if (typeof items === "string") {
                     try { items = JSON.parse(items); } catch(e) { items = []; }
                 }
@@ -1097,6 +1325,10 @@ if (!auth) {
                     };
                     cart.push(item);
                 });
+
+                $(this).renderTable(cart);
+                $("#customerOrdersModal").modal('hide');
+                $("#customerModal").modal('hide');
             }
 
             $(this).renderTable(cart);
@@ -1114,7 +1346,7 @@ if (!auth) {
             }
 
             let data = {
-                orderId: deleteId,
+                id: deleteId,
             }
 
             Swal.fire({
@@ -1192,10 +1424,29 @@ if (!auth) {
                     Swal.fire("Customer added!", "Customer added successfully!", "success");
                     $("#customer option:selected").removeAttr('selected');
                     $('#customer').append(
-                        $('<option>', { text: custData.name, value: `{"id": ${custData.id}, "name": ${custData.name}}`, selected: 'selected' })
+                        $('<option>', { 
+                                    text: custData.name, 
+                                    value: JSON.stringify({
+                                        id: custData.id,
+                                        name: custData.name,
+                                        phone: custData.phone,
+                                        email: custData.email,
+                                        address: custData.address
+                                    }),
+                                    selected: 'selected'
+                                })
                     );
 
-                    $('#customer').val(`{"id": ${custData.id}, "name": ${custData.name}}`).trigger('chosen:updated');
+                    $('#customer')
+                        .val(JSON.stringify({
+                            id: custData.id,
+                            name: custData.name,
+                            phone: custData.phone,
+                            email: custData.email,
+                            address: custData.address
+                        }))
+                        .trigger('chosen:updated');
+
 
                 }, error: function (data) {
                     $("#newCustomer").modal('hide');
@@ -1206,16 +1457,52 @@ if (!auth) {
                     });
                 }
             })
+
+            $('#userName').val('');
+            $('#phoneNumber').val('');
         })
 
 
         $("#confirmPayment").hide();
 
         $("#cardInfo").hide();
+        $("#onlinePaymentInfo").hide();
 
         $("#payment").on('input', function () {
             $(this).calculateChange();
         });
+
+        $.fn.calculateChange = function () {
+            let paid = parseFloat($("#payment").val()) || 0;
+            let total = parseFloat($("#payablePrice").val()) || 0;
+            let change = paid - total;
+
+            if (change >= 0) {
+                $("#change").text(change.toFixed(2));
+                $("#confirmPayment").show();
+            } 
+            else {
+                $("#change").text("");
+                $("#confirmPayment").hide();
+                
+            }
+        };
+
+        $.fn.go = function (number, isRefNumber) {
+            if (isRefNumber) {
+                $("#refNumber").val($("#refNumber").val() + number);
+            } else {
+                $("#payment").val($("#payment").val() + number);
+                $(this).calculateChange();
+            }
+        };
+
+        $.fn.digits = function () {
+            let current = $("#payment").val();
+            if (current.indexOf('.') === -1) {
+                $("#payment").val(current + '.');
+            }
+        };
 
 
         $("#confirmPayment").on('click', function () {
@@ -1229,6 +1516,23 @@ if (!auth) {
             else {
                 $(this).submitDueOrder(1);
             }
+        });
+
+        // Payment method selection handlers
+        $("#cash").on('click', function () {
+            paymentType = 0;
+            $("#cardInfo").hide();
+            $("#onlinePaymentInfo").hide();
+            $("#confirmPayment").show();
+            $(this).addClass('active').siblings().removeClass('active');
+        });
+
+        $("#online").on('click', function () {
+            paymentType = 3;
+            $("#cardInfo").hide();
+            $("#onlinePaymentInfo").show();
+            $("#confirmPayment").show();
+            $(this).addClass('active').siblings().removeClass('active');
         });
 
 
@@ -1357,6 +1661,10 @@ if (!auth) {
 
             $('#Products').modal('hide');
 
+            // Clear previous selection
+            $("#category option").prop("selected", false);
+            
+            // Set the correct category
             $("#category option").filter(function () {
                 return $(this).val() == allProducts[index].category;
             }).prop("selected", true);
@@ -1364,6 +1672,7 @@ if (!auth) {
             $('#productName').val(allProducts[index].name);
             $('#product_price').val(allProducts[index].price);
             $('#quantity').val(allProducts[index].quantity);
+            $('#product_sku').val(allProducts[index].sku || '');
 
             $('#product_id').val(allProducts[index].id);
             $('#img').val(allProducts[index].img);
@@ -1643,7 +1952,7 @@ if (!auth) {
                         <td>${product.name}</td>
                         <td>${settings.symbol}${parseFloat(product.price).toFixed(2)}</td>
                         <td>${product?.sku}</td>
-                        <td>${product.stock == 1 ? product.quantity : 'N/A'}</td>
+                        <td>${product.stock == 1 ? (product.quantity > 0 ? product.quantity : 'N/A') : 'N/A'}</td>
                         <td>${category.length > 0 ? category[0].name : ''}</td>
                         <td class="nobr">
                             <span class="btn-group">
@@ -2075,8 +2384,8 @@ if (!auth) {
 
 
 $.fn.print = function () {
-
-    printJS({ printable: receipt, type: 'raw-html' });
+    autoPrint = $('#autoPrintReceipt').is(':checked');
+    window.api.printReceipt(receipt, autoPrint);
 
 }
 
@@ -2110,10 +2419,13 @@ $.fn.print = function () {
 
                     // Parse items JSON string safely
                     let items = [];
-                    try {
-                        items = JSON.parse(trans.items);
-                    } catch (err) {
-                        console.error("Failed to parse items for transaction", trans.id, err);
+                    if (trans.items) {
+                        try {
+                            items = typeof trans.items === 'string' ? JSON.parse(trans.items) : trans.items;
+                        } catch (err) {
+                            console.error("Failed to parse items for transaction", trans.id, err);
+                            items = [];
+                        }
                     }
 
                     // Add parsed items to sold_items
@@ -2128,20 +2440,51 @@ $.fn.print = function () {
                     // }
 
                     counter++;
-                    transaction_list += `<tr>
-                        <td>${trans?.ref_number || (index+1)}</td>
-                        <td class="nobr">${moment(trans?.date).format('YYYY MMM DD hh:mm:ss')}</td>
-                        <td>${trans?.customer}</td>
+                    // Parse customer data safely
+                    let customerName = 'Walk in Customer';
+
+                    if (trans.customer) {
+                        try {
+                            const customer = typeof trans.customer === 'string'
+                                ? JSON.parse(trans.customer)
+                                : trans.customer;
+
+                            if (customer && customer.name) {
+                                customerName = customer.name;
+                            } else if (typeof customer === 'string') {
+                                customerName = customer;
+                            }
+                        } catch (e) {
+                            customerName = trans.customer; // fallback if JSON.parse fails
+                        }
+                    }
+
+
+                    transaction_list += `
+                        <tr>
+                        <td>${trans?.id}</td>
+                        <td class="nobr">${moment(trans?.date).format("YYYY MMM DD hh:mm:ss")}</td>
+                        <td>${customerName}</td>
                         <td>${trans?.order_type}</td>
                         <td>${trans?.payment_method}</td>
                         <td>${trans?.discount}</td>
                         <td>${trans?.subtotal}</td>
                         <td>${trans?.total}</td>
-                        <td>${trans.paid == "" 
-                            ? '<button class="btn btn-dark"><i class="fa fa-search-plus"></i></button>' 
-                            : '<button onClick="$(this).viewTransaction(' + index + ')" class="btn btn-info"><i class="fa fa-search-plus"></i></button>'
-                        }</td>
-                    </tr>`;
+                        <td>
+                            <button onClick="$(this).deleteTransaction(${trans.id})" class="btn btn-danger btn-xs">
+                            <i class="fa fa-trash"></i>
+                            </button>
+                        </td>
+                        <td>
+                            ${
+                            trans?.paid === ""
+                                ? `<button class="btn btn-dark"><i class="fa fa-search-plus"></i></button>`
+                                : '<button onClick="$(this).viewTransaction(' + index + ')" class="btn btn-info"><i class="fa fa-search-plus"></i></button>'
+                            }
+                        </td>
+                        </tr>
+                        `;
+
 
                     if (counter == transactions.length) {
 
@@ -2238,7 +2581,7 @@ function loadSoldProducts(sold) {
         sold_list += `<tr>
             <td>${item.product}</td>
             <td>${item.qty}</td>
-            <td>${product[0].stock == 1 ? product.length > 0 ? product[0].quantity : '' : 'N/A'}</td>
+            <td>${product[0].stock == 1 ? (product.length > 0 && product[0].quantity > 0 ? product[0].quantity : 'N/A') : 'N/A'}</td>
             <td>${settings.symbol + (item.qty * parseFloat(item.price)).toFixed(2)}</td>
             </tr>`;
 
@@ -2283,7 +2626,20 @@ $.fn.viewTransaction = function (index) {
     // transaction_index = index;
 
     let discount = allTransactions[index].discount ? allTransactions[index].discount : 0;
-    let customer = allTransactions[index].customer == 0 ? 'Walk in Customer' : allTransactions[index].customer.username;
+    let customer = 'Walk in Customer';
+
+    if (allTransactions[index].customer) {
+        try {
+            const customerData = typeof allTransactions[index].customer === 'string' 
+                ? JSON.parse(allTransactions[index].customer) 
+                : allTransactions[index].customer;
+
+            customer = customerData.name || customerData;
+        } catch (e) {
+            customer = allTransactions[index].customer;
+        }
+    }
+
     let refNumber = allTransactions[index].ref_number != "" ? allTransactions[index].ref_number : allTransactions[index].id;
     let orderNumber = allTransactions[index].id;
     let type = "";
@@ -2294,7 +2650,11 @@ $.fn.viewTransaction = function (index) {
     let products = JSON.parse(allTransactions[index].items);
 
     products.forEach(item => {
-        items += "<tr><td>" + item.product_name + "</td><td>" + item.quantity + "</td><td>" + settings.symbol + parseFloat(item.price).toFixed(2) + "</td></tr>";
+        items += `<div style="display: flex; justify-content: space-between; margin-bottom: 3px; font-size: 13px;">
+            <span style="flex: 2; text-align: left;">${item.product_name}</span>
+            <span style="flex: 0.5; text-align: center;">${item.quantity}</span>
+            <span style="flex: 1; text-align: right;">${settings.symbol}${parseFloat(item.price).toFixed(2)}</span>
+        </div>`;
 
     });
 
@@ -2310,21 +2670,18 @@ $.fn.viewTransaction = function (index) {
 
 
     if (allTransactions[index].paid != "") {
-        let payment = `<tr>
-                    <td>Paid</td>
-                    <td>:</td>
-                    <td>${settings.symbol + allTransactions[index].paid}</td>
-                </tr>
-                <tr>
-                    <td>Change</td>
-                    <td>:</td>
-                    <td>${settings.symbol + Math.abs(allTransactions[index].change).toFixed(2)}</td>
-                </tr>
-                <tr>
-                    <td>Method</td>
-                    <td>:</td>
-                    <td>${type}</td>
-                </tr>`
+        let payment = `<div style="display: flex; justify-content: space-between; margin-top: 5px; font-size: 13px;">
+                    <span>Paid</span>
+                    <span>${settings.symbol + allTransactions[index].paid}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 13px;">
+                    <span>Change</span>
+                    <span>${settings.symbol + Math.abs(allTransactions[index].change).toFixed(2)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 13px;">
+                    <span>Method</span>
+                    <span>${type}</span>
+                </div>`
     }
 
 
@@ -2339,66 +2696,104 @@ $.fn.viewTransaction = function (index) {
 
 
 
-    receipt = `<div style="font-size: 10px;" class="receipt">                            
-        <p style="text-align: center;">
-        ${settings.img ? '<img style="max-width: 50px;max-width: 100px;" src ="' + settings.img + '" /><br>' : '<span style="font-size: 22px;">${settings.store}</span> <br>'}
-            ${settings.address_one} <br>
-            ${settings.address_two} <br>
-            ${settings.contact != '' ? 'Tel: ' + settings.contact + '<br>' : ''} 
-    </p>
-    <hr>
-        <p style="text-align:left;">
-        Invoice : ${orderNumber} <br>
-        Ref No : ${refNumber} <br>
-        Customer : ${allTransactions[index].customer == 0 ? 'Walk in Customer' : allTransactions[index].customer.name} <br>
-        Cashier : ${allTransactions[index].user} <br>
-        Date : ${moment(allTransactions[index].date).format('DD MMM YYYY HH:mm:ss')}<br>
-        </p>
-    <hr>
-    <table width="100%">
-        <thead style="text-align: left;">
-        <tr>
-            <th>Item</th>
-            <th>Qty</th>
-            <th>Price</th>
-        </tr>
-        </thead>
-        <tbody>
-        ${items}                
+    const logoUrl2 = (function(){
+        const src = settings.img || '';
+        if (!src) return '';
+        if (/^(data:|https?:\/\/|file:\/\/)/i.test(src)) return src;
+        return `${api}${src}`;
+    })();
+
+    receipt = `<div style="font-family: 'Courier New', monospace; font-size: 14px; width: 100%; max-width: 300px; margin: 0; padding: 2px; background: white;" class="receipt">                            
+        <div style="text-align: center; margin-bottom: 5px;">
+        ${logoUrl2 ? '<img style="max-width: 100px; max-height: 80px;" src ="' + logoUrl2 + '" /><br>' : '<div style=\"font-size: 20px; font-weight: bold; margin-bottom: 5px;\">' + settings.store + '</div>'}
+            <div style="font-size: 13px; line-height: 1.3;">${settings.address_one}</div>
+            <div style="font-size: 13px; line-height: 1.3;">${settings.address_two}</div>
+            ${settings.contact != '' ? '<div style="font-size: 13px;">Tel: ' + settings.contact + '</div>' : ''} 
+        </div>
+        <div style="border-top: 1px dashed #000; margin: 5px 0;"></div>
+            <div style="font-size: 13px; line-height: 1.4;">
+            <div style="display: flex; justify-content: space-between;"><span style="font-weight: bold;">Invoice:</span><span>${orderNumber}</span></div>
+            <div style="display: flex; justify-content: space-between;"><span style="font-weight: bold;">Ref No:</span><span>${refNumber}</span></div>
+            <div style="display: flex; justify-content: space-between;"><span style="font-weight: bold;">Customer:</span><span>${customer.name ? customer.name : customer}</span></div>
+            <div style="display: flex; justify-content: space-between;"><span style="font-weight: bold;">Date:</span><span>${moment(allTransactions[index].date).format('DD MMM YYYY HH:mm:ss')}</span></div>
+            </div>
+        <div style="border-top: 1px dashed #000; margin: 5px 0;"></div>
+        <div style="font-size: 13px;">
+            <div style="display: flex; justify-content: space-between; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 3px; margin-bottom: 5px;">
+                <span>Item</span>
+                <span>Qty</span>
+                <span>Price</span>
+            </div>
+            ${items}                
  
-        <tr>
-            <td colspan="2"><b>Subtotal</b></td>
-            <td style="text-align:right;"><b>${settings.symbol}${allTransactions[index].total}</b></td>
-        </tr>
-        <tr>
-            <td colspan="2">Discount</td>
-            <td style="text-align:right;">${discount > 0 ? settings.symbol + parseFloat(allTransactions[index].discount).toFixed(2) : 0}</td>
-        </tr>
+            <div style="display: flex; justify-content: space-between; margin-top: 5px;">
+                <span style="font-weight: bold;">Subtotal</span>
+                <span style="font-weight: bold;">${settings.symbol}${allTransactions[index].total}</span>
+            </div>
+            ${discount > 0 ? `<div style="display: flex; justify-content: space-between;">
+                <span>Discount</span>
+                <span>${settings.symbol}${parseFloat(allTransactions[index].discount).toFixed(2)}</span>
+            </div>` : ''}
         
-        ${tax_row}
-    
-        <tr>
-            <td colspan="2"><h5>Total</h5></td>
-            <td style="text-align:right;">
-                <h5>${settings.symbol} ${(parseInt(allTransactions[index].total) - discount)}</h5>
-            </td>
-        </tr>
-        ${payment == 0 ? '' : payment}
-        </tbody>
-        </table>
-        <br>
-        <hr>
-        <br>
-        <p style="text-align: center;">
-         ${settings.footer}
-         </p>
-        </div>`;
+            <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 15px; margin-top: 8px; padding-top: 5px; border-top: 1px solid #000;">
+                <span>TOTAL</span>
+                <span>${settings.symbol}${(parseInt(allTransactions[index].total) - discount)}</span>
+            </div>
+            </div>
+            <div style="border-top: 1px dashed #000; margin: 5px 0;"></div>
+            <div style="text-align: center; font-size: 12px; margin-top: 5px; margin-bottom: 10px;">
+             ${settings.footer}
+             </div>
+            </div>`;
 
     $('#viewTransaction').html('');
     $('#viewTransaction').html(receipt);
 
     $('#orderModal').modal('show');
 
+}
+
+$.fn.deleteTransaction = function (id) {
+
+            let data = {
+                id: id
+            }
+
+            Swal.fire({
+                title: "Delete Transaction?",
+                text: "This will delete the transaction. Are you sure you want to delete!",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Yes, delete it!'
+            }).then((result) => {
+
+                if (result.value) {
+
+                    $.ajax({
+                        url: api + 'delete',
+                        type: 'POST',
+                        data: JSON.stringify(data),
+                        contentType: 'application/json; charset=utf-8',
+                        cache: false,
+                        success: function (data) {
+
+                            loadTransactions();
+
+                            Swal.fire(
+                                'Deleted!',
+                                'You have deleted the transaction!',
+                                'success'
+                            )
+
+                        }, error: function (data) {
+                            $(".loading").hide();
+
+                        }
+                    });
+                }
+            });
 }
 
 
@@ -2420,6 +2815,15 @@ $('#users').change(function () {
     loadTransactions();
 });
 
+
+$('#order_type').on('change', function() {
+    if ($(this).val() === 'Delivery') {
+        $('#deliveryAddress').show();
+    } else {
+        $('#deliveryAddress').hide();
+        $('#deliveryAddress').val('');
+    }
+});
 
 $('#reportrange').on('apply.daterangepicker', function (ev, picker) {
 

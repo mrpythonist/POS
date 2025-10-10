@@ -16,7 +16,7 @@
     </head>
   <body>
     
-  <div class="main_app">
+  <div class="main_app" style="width:100vw;height:100vh;overflow:hidden;">
 
   <div id="loading"></div>
   <div class="container">
@@ -60,9 +60,17 @@
 
                     <div class="button-list pull-right m-t-15 m-l-10">  
 
-                            <button id="settings" data-toggle="modal" data-target="#settingsModal"  type="button"  class="btn btn-default waves-effect waves-light p_five">
+                            <!-- <button id="settings" data-toggle="modal" data-target="#settingsModal"  type="button"  class="btn btn-default waves-effect waves-light p_five">
                                 <i class="glyphicon glyphicon-cog"></i>
-                          </button>
+                          </button> -->
+
+                            <div class="waves-effect waves-light p_five" style="display: inline-block; margin-right: 10px; margin-top: 10px;">
+                              <label class="switch">
+                                <input type="checkbox" id="autoPrintReceipt">
+                                <span class="slider round"></span>
+                              </label>
+                              <span style="margin-left:8px; vertical-align: middle;">Auto Print Receipt</span>
+                            </div>
 
                             <button id="transactions" type="button" class="btn btn-default waves-effect waves-light p_three">
                             <span class="btn-label"><i class=" 	glyphicon glyphicon-credit-card"></i> </span>  Transactions 
@@ -72,19 +80,24 @@
                                 <span class="btn-label"><i class=" 	glyphicon glyphicon-shopping-cart"></i> </span>  Point of Sale
                             </button>
 
-                            <div class="btn-group p_four">
+                            <!-- <div class="btn-group p_four">
                                 <button id="usersModal" data-toggle="modal" data-target="#Users" type="button" class="btn btn-default waves-effect waves-light">
                                         <span class="btn-label"><i class=" 	glyphicon glyphicon-user"></i> </span>  Users  
                                 </button>
                                 <button id="add-user" data-toggle="modal"   type="button" class="btn btn-dark waves-effect waves-light">
                                         <i class="fa fa-plus"></i> 
                                 </button>
-                             </div>
+                             </div> -->
 
 
-                            <button type="button"  class="btn btn-light waves-effect waves-light" id="cashier">
+                            <!-- <button type="button"  class="btn btn-light waves-effect waves-light" id="cashier">
+                                <span class="btn-label"><i class="glyphicon glyphicon-user"></i> </span> <span id="loggedin-user"></span>
+                         </button> -->
+
+                         <button type="button"  class="btn btn-light waves-effect waves-light">
                                 <span class="btn-label"><i class="glyphicon glyphicon-user"></i> </span> <span id="loggedin-user"></span>
                          </button>
+                         
 
                             <button id="log-out"  type="button"  class="btn btn-warning waves-effect waves-light">
                                     <i class="glyphicon glyphicon-log-out"></i>
@@ -186,7 +199,7 @@
                             <table class="table tablesaw-enhanced" id="transactionList">
                                 <thead>
                                     <tr>                                                                      
-                                        <th>Invoice</th>                                      
+                                        <th>ID</th>                                      
                                         <th>Date</th>
                                         <th>Customer</th>
                                         <th>Order Type</th>
@@ -194,6 +207,7 @@
                                         <th>Discount</th>
                                         <th>Subtotal</th>
                                         <th>Total</th>
+                                        <th>Delete</th>
                                         <th>View</th>
                                     </tr>
                                 </thead>
@@ -222,13 +236,20 @@
                               <button data-toggle="modal" data-target="#newCustomer" class="btn btn-success"><i class="fa fa-plus"></i></button>
                           </div>
                       </div>
-                      <div class="row">
-                          <div class="col-md-12">
+                      <div class="row m-t-5">
+                          <div class="col-md-10">
                               <select name="order_type" id="order_type" class="form-control">
                           </select>
                           </div>
                       </div>
-                      <div class="input-group m-t-5">
+                      <div class="row m-t-5">
+                          <div class="col-md-10">
+                              <input type="text" id="deliveryAddress" class="form-control" placeholder="Enter delivery address" style="display:none;">
+                          </select>
+                          </div>
+                      </div>
+                      
+                      <div class="input-group m-t-5 col-md-10">
                           <form action="" id="searchBarCode">
                               <input type="text" required id="skuCode" name="skuCode" class="form-control" placeholder="Scan barcode or type the number then hit enter" aria-label="Recipient's username" aria-describedby="basic-addon2">
                               <input type="submit" style="display:none;">
@@ -265,7 +286,7 @@
                      <div class="row">
                          <div class="col-md-3">Total Item(s)</div>
                          <div class="col-md-3">: <sapn id="total">0</sapn></div>
-                         <div class="col-md-3">Price :</div>
+                         <div class="col-md-3">Subtotal :</div>
                          <div class="col-md-3">: <span id="price">0.0</span></div>
                      </div>
                      <div class="row">
@@ -306,9 +327,9 @@
                           <input type="text" id="search" class="form-control" placeholder="Search product by name or sku">
                       </div>
                       <div class="col-md-8">
-                          <div class="" id="categories">
-                              
-                          </div>
+                          <select id="categoryFilter" class="form-control">
+                              <option value="all">All Categories</option>
+                          </select>
                       </div>
                   </div>
                   <hr>
@@ -332,7 +353,7 @@
               </div>
               <div class="modal-body">
                   <form action="">
-                      <input type="text" id="refNumber" placeholder="Enter a reference" class="form-control">
+                      <input type="text" id="refNumber" placeholder="Enter a table number" class="form-control">
                   </form>
                   <hr>
                   <div class="row">
@@ -402,10 +423,10 @@
                   <div class="row">
                       <div class="col-md-4">
                           <div class="list-group">
-                              <a href="javascript:void(0)" id="cash" onclick="paymentType = 1" class="list-group-item active">
+                              <a href="javascript:void(0)" id="cash" class="list-group-item active">
                                   Cash
                               </a>
-                            <a href="javascript:void(0)" id="online" onclick="paymentType = 3" class="list-group-item">Online</a>
+                            <a href="javascript:void(0)" id="online" class="list-group-item">Online</a>
                           </div>
                       </div>
                       <div class="col-md-8">
@@ -482,6 +503,16 @@
                               <span class="input-group-addon" id="basic-addon3">Card Info </span>
                               <input type="text" class="form-control" id="paymentInfo" aria-describedby="basic-addon3">
                           </div>
+                          <div class="input-group" id="onlinePaymentInfo" style="display: none;">
+                              <span class="input-group-addon" id="basic-addon4">Payment Method</span>
+                              <select class="form-control" id="accountType" aria-describedby="basic-addon4">
+                                  <option value="">Select Payment Method</option>
+                                  <option value="JazzCash">JazzCash</option>
+                                  <option value="EasyPaisa">EasyPaisa</option>
+                                  <option value="RaastID">RaastID</option>
+                                  <option value="Bank Account">Bank Account</option>
+                              </select>
+                          </div>
                       </div>
                   </div>
               </div>
@@ -519,14 +550,6 @@
                       <div class="form-group">
                           <label for="userName">Customer Phone</label>
                           <input type="text" name="phone" parsley-trigger="change" placeholder="Enter Phone number" class="form-control" id="phoneNumber">
-                      </div>
-                      <div class="form-group">
-                          <label for="userName">Customer Email</label>
-                          <input type="email" name="email" parsley-trigger="change" placeholder="Enter email address" class="form-control" id="emailAddress">
-                      </div>
-                      <div class="form-group">
-                          <label for="userName">Customer Address</label>
-                          <input type="text" name="address" parsley-trigger="change" placeholder="Enter address" class="form-control" id="userAddress">
                       </div>
 
                       <input type="submit" class="btn btn-primary btn-block waves-effect waves-light">
@@ -896,7 +919,7 @@
                                  </div>
                                  <div class="form-group">
                                         <label for="userName">Address Line 2</label>
-                                        <input type="text" required="required"  name="address_two" class="form-control" id="address_two">
+                                        <input type="text"  name="address_two" class="form-control" id="address_two">
                                  </div>
                                  <div class="form-group">
                                         <label for="userName">Contact Number</label>
